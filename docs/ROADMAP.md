@@ -15,7 +15,15 @@ _Založeno 2026-10-09._
 - Řezání dlouhého diktátu v tichu (Silero VAD) místo natvrdo po 30 s.
 - Nastavení jazyka v aplikaci (dnes jen z volající aplikace, jinak čeština).
 
-## Fáze 2 – plovoucí okno (jako Wispr Flow)
+## Fáze 2 – průběžný přepis (jako Google)
+- Během mluvení přepisovat rozpracovaný úsek znovu zhruba každou sekundu (na NPU ~0,35 s enkodér
+  + 11 ms/token, tj. ~0,7 s na 10 s větu) a posílat `partialResults`.
+- Klávesnice zobrazí nehotový text jako rozepsaný (`setComposingText`), po pauze zapíše natrvalo.
+- Stabilizace: slovo se zafixuje, až když ho dva po sobě jdoucí průchody přepíšou stejně.
+- Změřit spotřebu a teplotu (NPU pracuje po celou dobu mluvení). S českým large (32 vrstev
+  dekodéru) bude výrazně pomalejší – rozhodnout podle srovnání modelů.
+
+## Fáze 3 – plovoucí okno (jako Wispr Flow)
 - Plovoucí tlačítko nad všemi aplikacemi (overlay, `SYSTEM_ALERT_WINDOW`), diktování jedním
   klepnutím nebo podržením, bez přepínání klávesnice.
 - Vložení textu do aktivního pole: přes AccessibilityService (`ACTION_SET_TEXT`/vložení ze schránky),
@@ -23,7 +31,7 @@ _Založeno 2026-10-09._
 - Ověřit na Androidu 16: mikrofon z overlaye (foreground service `microphone`, výjimky
   „while-in-use“), Samsung omezení na pozadí.
 
-## Fáze 3 – AI úprava textu na zařízení
+## Fáze 4 – AI úprava textu na zařízení
 - Malý jazykový model (např. Gemma) po přepisu: opravy, přeřeky, interpunkce, odrážky,
   režimy (e-mail, poznámka, seznam).
 - Kandidáti běhu: Google AI Edge / LiteRT-LM (GPU), Qualcomm AI Hub + Genie (NPU). Vybrat podle
