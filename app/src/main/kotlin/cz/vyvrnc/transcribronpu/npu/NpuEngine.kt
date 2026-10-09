@@ -33,7 +33,11 @@ object NpuEngine {
     fun preload(context: Context) {
         val app = context.applicationContext
         if (!NpuModel.ready(app)) return
-        scope.launch { runCatching { mutex.withLock { ensureLoaded(app) } }.onFailure { Log.w(TAG, "preload failed", it) } }
+        scope.launch {
+            runCatching { mutex.withLock { ensureLoaded(app) } }.onFailure { Log.w(TAG, "preload failed", it) }
+            // A session cancelled before any transcription must not keep ~2 GB loaded forever.
+            scheduleIdleRelease()
+        }
     }
 
     /**
@@ -42,16 +46,19 @@ object NpuEngine {
      */
     suspend fun transcribe(context: Context, pcm: FloatArray, language: String): String = withContext(Dispatchers.IO) {
         val app = context.applicationContext
-        val ids = mutex.withLock {
-            val h = ensureLoaded(app)
-            val t0 = System.nanoTime()
-            NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS).also {
-                Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, loop cuts %d)".format(
-                    pcm.size / 16000f, it.size - 2, (System.nanoTime() - t0) / 1_000_000,
-                    WhisperTokenizer.langCode(it[0]), it[1]))
+        val ids = try {
+            mutex.withLock {
+                val h = ensureLoaded(app)
+                val t0 = System.nanoTime()
+                NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS).also {
+                    Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, loop cuts %d)".format(
+                        pcm.size / 16000f, it.size - 2, (System.nanoTime() - t0) / 1_000_000,
+                        WhisperTokenizer.langCode(it[0]), it[1]))
+                }
             }
+        } finally {
+            scheduleIdleRelease()   // also after a failure, so the model is still released when idle
         }
-        scheduleIdleRelease()
         WhisperTokenizer.decode(app, ids.drop(2)).trim()
     }
 

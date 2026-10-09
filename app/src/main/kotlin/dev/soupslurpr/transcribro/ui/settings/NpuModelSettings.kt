@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import cz.vyvrnc.transcribronpu.npu.NpuModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -57,27 +58,42 @@ fun NpuModelItem() {
                     return@clickable
                 }
                 val started = System.nanoTime()
-                job = scope.launch {
+                // Every state write checks that this download is still the current one: a
+                // cancelled download's blocking read ends later and must not overwrite the
+                // state (or clear the handle) of a download started after it.
+                lateinit var self: Job
+                self = scope.launch(start = CoroutineStart.LAZY) {
                     try {
                         withContext(Dispatchers.IO) {
                             NpuModel.download(context) { phase, done, total ->
-                                val secs = ((System.nanoTime() - started) / 1e9).coerceAtLeast(0.1)
-                                progress = done.toFloat() / total.coerceAtLeast(1)
-                                status = "%s: %.0f / %.0f MB (%.1f MB/s). Klepnutím zrušíte.".format(
-                                    phase, done / 1048576.0, total / 1048576.0, done / 1048576.0 / secs)
+                                // Check and write on the main thread together, where the
+                                // click handler swaps `job`.
+                                scope.launch {
+                                    if (job !== self) return@launch
+                                    val secs = ((System.nanoTime() - started) / 1e9).coerceAtLeast(0.1)
+                                    progress = done.toFloat() / total.coerceAtLeast(1)
+                                    status = "%s: %.0f / %.0f MB (%.1f MB/s). Klepnutím zrušíte.".format(
+                                        phase, done / 1048576.0, total / 1048576.0, done / 1048576.0 / secs)
+                                }
                             }
                         }
-                        ready = NpuModel.ready(context)
-                        status = null
+                        if (job === self) {
+                            ready = NpuModel.ready(context)
+                            status = null
+                        }
                     } catch (e: CancellationException) {
-                        status = "Stahování přerušeno, při dalším klepnutí naváže."
+                        if (job === self) status = "Stahování přerušeno, při dalším klepnutí naváže."
                     } catch (e: Exception) {
-                        status = "Chyba: ${e.message}"
+                        if (job === self) status = "Chyba: ${e.message}"
                     } finally {
-                        progress = null
-                        job = null
+                        if (job === self) {
+                            progress = null
+                            job = null
+                        }
                     }
                 }
+                job = self
+                self.start()
             },
             headlineContent = { Text("NPU model (Whisper large-v3-turbo)", fontWeight = FontWeight.SemiBold) },
             supportingContent = { Text(description) },

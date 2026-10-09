@@ -22,6 +22,7 @@ import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadDetector
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadLocalDataSource
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadRepository
 import dev.soupslurpr.transcribro.recognitionservice.whisper.WhisperRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -61,11 +62,20 @@ class MainRecognitionService : RecognitionService() {
 
     private val whisperRepository by lazy { WhisperRepository(applicationContext) }
 
-    /** Transcribes one segment; a failure is logged and yields no text instead of a crash. */
-    private suspend fun transcribeSegment(audio: ShortArray, language: String): String =
-        runCatching { whisperRepository.transcribeAudio(audio, language) }
-            .onFailure { Log.e("MainRecognitionService", "NPU transcription failed", it) }
-            .getOrDefault("")
+    /**
+     * Transcribes one segment; a failure is logged, flagged in the session's [failed] and
+     * yields no text instead of a crash. Cancellation is not a failure and propagates.
+     */
+    private suspend fun transcribeSegment(audio: ShortArray, language: String, failed: AtomicBoolean): String =
+        try {
+            whisperRepository.transcribeAudio(audio, language)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("MainRecognitionService", "NPU transcription failed", e)
+            failed.set(true)
+            ""
+        }
 
     private val sileroVadRepository = SileroVadRepository(
         SileroVadLocalDataSource(
@@ -114,6 +124,8 @@ class MainRecognitionService : RecognitionService() {
         }
         // Load the model onto the NPU while the user speaks (3-4 s on the first use).
         whisperRepository.preload()
+        // Per session: a cancelled older session finishing late must not mark this one.
+        val segmentFailed = AtomicBoolean(false)
 
         if (recordAndTranscribeJob?.isActive == true) {
             listener?.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
@@ -310,6 +322,7 @@ class MainRecognitionService : RecognitionService() {
                                     )
                                         .toShortArray(),
                                     language,
+                                    segmentFailed,
                                 )
 
                             transcription.text = transcriptionText
@@ -385,6 +398,7 @@ class MainRecognitionService : RecognitionService() {
                                                     )
                                                         .toShortArray(),
                                                     language,
+                                                    segmentFailed,
                                                 )
 
                                             totalTranscriptionTime += currentTimeMillis() - timeBeforeTranscription
@@ -458,6 +472,17 @@ class MainRecognitionService : RecognitionService() {
             val transcription = transcriptions.toSortedMap().values
                 .mapNotNull { it.text?.trim()?.takeIf(String::isNotEmpty) }
                 .joinToString(" ")
+
+            if (segmentFailed.get() && transcription.isEmpty()) {
+                // Nothing usable came back because the NPU failed: say so instead of
+                // delivering an empty "success". Partial text from other segments is kept.
+                try {
+                    listener?.error(SpeechRecognizer.ERROR_CLIENT)
+                } catch (e: RemoteException) {
+                    throw RuntimeException(e)
+                }
+                return@recordAndTranscribe
+            }
 
             val bundle = Bundle().apply {
                 putStringArrayList(

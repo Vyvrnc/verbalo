@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Only for the one-time NPU model download from Qualcomm (Settings); audio never leaves the device. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <intent>
