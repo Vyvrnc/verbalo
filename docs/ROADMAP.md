@@ -35,7 +35,8 @@ _Založeno 2026-10-09._
   odvolat. Licenci zkompilovaných modelů z AI Hub je potřeba přečíst. Český fine-tune je Apache-2.0.
 - Pokrytí zařízení: NPU cesta jen Snapdragon (binárka pro každý čipset zvlášť); pro ostatní
   telefony záloha (CPU/GPU, menší model).
-- Konkurence a odlišení: Gboard (zdarma, offline), Wispr Flow (cloud). Hlavní odlišení: menší
-  jazyky (čeština, slovenština, polština, maďarština…), kde velcí hráči ladí méně – fine-tune
-  Whisperu pro jazyk + slovníček oboru. K tomu offline, soukromí, AI úprava na zařízení.
+- Konkurence a odlišení: Gboard (zdarma, offline), Wispr Flow (cloud). Hlavní odlišení: kvalitní
+  přepis menších jazyků (čeština, slovenština, polština…) **offline na zařízení** – v cloudu je
+  zvládají dobře i Google a Whisper API, lokálně ne. Fine-tune pro jazyk + slovníček oboru,
+  soukromí (audio neopouští telefon), AI úprava na zařízení. Očekávání: malý doplňkový příjem.
 - Důkaz odlišení: změřit WER na stejných českých nahrávkách proti Gboardu a Wispr Flow.
