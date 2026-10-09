@@ -237,6 +237,7 @@ class FloatingDictationService : Service() {
         }
         sessionText.clear()
         insertFailed = false
+        bubbleDismissed = false
         cleanup = NpuSettings.cleanupMode(this).takeIf { LlmModel.ready(this) } ?: LlmCleaner.Mode.OFF
         if (cleanup != LlmCleaner.Mode.OFF) LlmCleaner.preload(this)
         dictating = true
@@ -318,7 +319,11 @@ class FloatingDictationService : Service() {
         )
     }
 
+    /** The user tapped the bubble away for this dictation. */
+    private var bubbleDismissed = false
+
     private fun showBubble(text: String) {
+        if (bubbleDismissed) return
         val b = bubble ?: TextView(this).apply {
             setTextColor(0xFFFFFFFF.toInt())
             textSize = 15f
@@ -331,7 +336,13 @@ class FloatingDictationService : Service() {
                 setColor(0xFF263238.toInt())
             }
         }.also { tv ->
-            val params = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, touchable = false)
+            // Touchable: Android 12+ drops touches that pass through an opaque overlay of another
+            // app anyway, so the bubble takes them and a tap hides it for this dictation.
+            val params = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, touchable = true)
+            tv.setOnClickListener {
+                bubbleDismissed = true
+                hideBubble()
+            }
             tv.maxWidth = (resources.displayMetrics.widthPixels * 0.8).toInt()
             windowManager.addView(tv, params)
             bubble = tv

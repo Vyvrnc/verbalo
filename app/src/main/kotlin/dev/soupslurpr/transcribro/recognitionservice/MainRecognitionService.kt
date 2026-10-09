@@ -300,10 +300,15 @@ class MainRecognitionService : RecognitionService() {
                     // is set belongs to its final transcription job and is not touched.
                     val transcription = transcriptions[transcriptionIndex]
                     val start = transcription?.start
-                    if (transcription != null && start != null && transcription.end == null) {
+                    // Copied under the segment's lock: once end is set, the final job may clear
+                    // the buffer, and it does so under the same lock.
+                    val audio = if (transcription != null && start != null) synchronized(transcription) {
+                        if (transcription.end != null) return@synchronized null
                         val data = transcription.audioData
                         val from = (start.toInt() - speechStartPadMs).coerceIn(0, data.size)
-                        val audio = ShortArray(data.size - from) { data[from + it] }
+                        ShortArray(data.size - from) { data[from + it] }
+                    } else null
+                    if (audio != null && transcription != null) {
                         if (audio.size >= LIVE_MIN_SAMPLES) {
                             lastLiveAt = currentTimeMillis()
                             liveJob = transcribeScope.launch {
@@ -391,7 +396,7 @@ class MainRecognitionService : RecognitionService() {
                                 }
                             }
 
-                            transcription.audioData.clear()
+                            synchronized(transcription) { transcription.audioData.clear() }
 
                             if (isPartialResults == true) {
                                 val bundle = Bundle().apply {
@@ -465,7 +470,7 @@ class MainRecognitionService : RecognitionService() {
                                                 }
                                             }
 
-                                            transcription.audioData.clear()
+                                            synchronized(transcription) { transcription.audioData.clear() }
 
                                             if (isPartialResults == true) {
                                                 val bundle = Bundle().apply {

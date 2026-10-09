@@ -972,6 +972,9 @@ class VoiceInput : InputMethodService() {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         if (!liveTextShown) {
+            // Composing text would replace a selection, and a cancelled dictation could not
+            // bring it back; with a selection only the final text is inserted.
+            if (!ic.getSelectedText(0).isNullOrEmpty()) return
             // Decided once per segment from the text before the preview, which the
             // composing text itself would otherwise change.
             val before = ic.getTextBeforeCursor(1, 0)
