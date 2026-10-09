@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Only for the one-time NPU model download from Qualcomm (Settings); audio never leaves the device. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Floating dictation button: overlay window + microphone foreground service. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
         <intent>
@@ -55,6 +60,23 @@
             <meta-data
                 android:name="android.view.im"
                 android:resource="@xml/input_method" />
+        </service>
+
+        <service
+            android:name="cz.vyvrnc.transcribronpu.floating.FloatingDictationService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
+            android:name="cz.vyvrnc.transcribronpu.floating.TextInsertionService"
+            android:exported="false"
+            android:label="@string/text_insertion_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/text_insertion_service" />
         </service>
 
         <activity

@@ -57,6 +57,12 @@ fun SettingsStartScreen(
             NpuRecognitionSettings()
         }
         item {
+            SettingsCategory("Plovoucí diktování")
+        }
+        item {
+            FloatingSettings()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )
