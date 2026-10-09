@@ -27,6 +27,9 @@
         android:memtagMode="async"
         android:supportsRtl="true"
         tools:targetApi="34">
+        <!-- FastRPC client from the vendor partition; apps targeting S+ must declare it, otherwise
+             the linker namespace hides it and QNN cannot load its DSP stub. -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
         <service
             android:name=".recognitionservice.MainRecognitionService"
             android:exported="true"

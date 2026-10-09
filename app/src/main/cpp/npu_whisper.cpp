@@ -71,7 +71,10 @@ void log_cb(const char * fmt, QnnLog_Level_t level, uint64_t, va_list args) {
     va_end(copy);
     std::lock_guard<std::mutex> lock(g_log_mutex);
     if (g_log.size() > 32 * 1024) return;
-    g_log += level == QNN_LOG_LEVEL_ERROR ? "  [QNN E] " : "  [QNN W] ";
+    static const char * names[] = {"?", "E", "W", "I", "V", "D"};
+    g_log += "  [QNN ";
+    g_log += (level >= 1 && level <= 5) ? names[level] : "?";
+    g_log += "] ";
     g_log += buf;
     if (g_log.back() != '\n') g_log += '\n';
 }
@@ -273,7 +276,7 @@ public:
             g_log.clear();
         }
         try {
-            if (api_->logCreate) api_->logCreate(log_cb, QNN_LOG_LEVEL_WARN, &log_);
+            if (api_->logCreate) api_->logCreate(log_cb, QNN_LOG_LEVEL_INFO, &log_);   // INFO: the bring-up steps, for failure reports
             check(api_->backendCreate(log_, nullptr, &backend_), "backendCreate");
             check(api_->deviceCreate(log_, nullptr, &device_), "deviceCreate");
             set_burst();
@@ -727,8 +730,10 @@ NPU_FN(jlong, open)(JNIEnv * env, jclass, jstring libDir, jstring encoderPath, j
         return reinterpret_cast<jlong>(e.release());
     } catch (const std::exception & ex) {
         std::string msg = ex.what();
-        if (e->rt) { const std::string l = e->rt->qnn_log(); if (!l.empty()) msg += "\n" + l; }
         e.reset();
+        // Read after reset: the runtime may never have existed (its constructor threw), and
+        // freeing it can log too. The log is global.
+        { std::lock_guard<std::mutex> lock(g_log_mutex); if (!g_log.empty()) msg += "\nQNN log:\n" + g_log; }
         throw_java(env, msg.c_str());
         return 0;
     }
