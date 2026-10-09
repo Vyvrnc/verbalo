@@ -1,50 +1,32 @@
 # Roadmap – Transcribro NPU
 
-_Založeno 2026-10-09._
+## Done
+- 0.1.x: Whisper large-v3-turbo float16 on the NPU (QNN HTP, SM8750), recognition service,
+  voice input keyboard, RECOGNIZE_SPEECH, in-app model download, Czech as the default language.
 
-## Hotovo
-- 0.1.0: Whisper large-v3-turbo float16 na NPU (QNN HTP, SM8750), rozpoznávací služba,
-  hlasová klávesnice, RECOGNIZE_SPEECH, stažení modelu v aplikaci, čeština jako výchozí jazyk.
+## Phase 1 – quality and usability
+- Field test on the Fold: latency of first and later dictations; Samsung Keyboard, Gboard, HeliBoard.
+- Czech fine-tune `mikr/whisper-large-v3-czech-cv13` on the NPU (compiled with AI Hub) and a
+  comparison with turbo on the same recordings.
+- Domain vocabulary as a Whisper prompt (`<|startofprev|>`), plus a replacement dictionary.
+- Split long dictation at silences (Silero VAD) instead of hard 30 s cuts.
+- Language setting in the app (today: from the calling app, Czech otherwise).
 
-## Fáze 1 – kvalita a použitelnost
-- Ověřit na Foldu: latence prvního a dalších diktátů, Samsung Keyboard, Gboard, HeliBoard.
-- Český fine-tune `mikr/whisper-large-v3-czech-cv13` na NPU (kompilace přes AI Hub běží),
-  srovnat s turbem na stejné nahrávce (DI zadání).
-- Slovníček pojmů (DI, Flowbox, Flowbot, Claude, Confluence…) jako prompt Whisperu
-  (`<|startofprev|>`), nad tím náhradový slovník.
-- Řezání dlouhého diktátu v tichu (Silero VAD) místo natvrdo po 30 s.
-- Nastavení jazyka v aplikaci (dnes jen z volající aplikace, jinak čeština).
+## Phase 2 – live partial transcription
+- While speaking, re-transcribe the current segment about once a second (on the NPU ~0.35 s
+  encoder + 11 ms/token, ~0.7 s for a 10 s sentence) and send `partialResults`.
+- The keyboard shows unfinished text as composing text and commits it after the pause.
+- Stabilisation: a word is committed once two consecutive passes agree on it.
+- Measure battery and temperature; the large Czech model (32 decoder layers) will be much slower.
 
-## Fáze 2 – průběžný přepis (jako Google)
-- Během mluvení přepisovat rozpracovaný úsek znovu zhruba každou sekundu (na NPU ~0,35 s enkodér
-  + 11 ms/token, tj. ~0,7 s na 10 s větu) a posílat `partialResults`.
-- Klávesnice zobrazí nehotový text jako rozepsaný (`setComposingText`), po pauze zapíše natrvalo.
-- Stabilizace: slovo se zafixuje, až když ho dva po sobě jdoucí průchody přepíšou stejně.
-- Změřit spotřebu a teplotu (NPU pracuje po celou dobu mluvení). S českým large (32 vrstev
-  dekodéru) bude výrazně pomalejší – rozhodnout podle srovnání modelů.
+## Phase 3 – floating dictation button
+- A floating button over all apps (overlay), dictation with a tap or hold, no keyboard switch.
+- Insert text into the focused field through an AccessibilityService, clipboard as fallback.
+- Verify on Android 16: microphone access from the overlay (microphone foreground service,
+  while-in-use exemptions) and Samsung background limits.
 
-## Fáze 3 – plovoucí okno (jako Wispr Flow)
-- Plovoucí tlačítko nad všemi aplikacemi (overlay, `SYSTEM_ALERT_WINDOW`), diktování jedním
-  klepnutím nebo podržením, bez přepínání klávesnice.
-- Vložení textu do aktivního pole: přes AccessibilityService (`ACTION_SET_TEXT`/vložení ze schránky),
-  záloha přes schránku.
-- Ověřit na Androidu 16: mikrofon z overlaye (foreground service `microphone`, výjimky
-  „while-in-use“), Samsung omezení na pozadí.
-
-## Fáze 4 – AI úprava textu na zařízení
-- Malý jazykový model (např. Gemma) po přepisu: opravy, přeřeky, interpunkce, odrážky,
-  režimy (e-mail, poznámka, seznam).
-- Kandidáti běhu: Google AI Edge / LiteRT-LM (GPU), Qualcomm AI Hub + Genie (NPU). Vybrat podle
-  češtiny, latence a paměti (Whisper ~2 GB + LLM v 11 GB RAM).
-
-## Komerční produkt – otevřené otázky
-- Licence: kód Transcribro ISC a Whisper MIT jsou v pořádku. QNN runtime (AI Stack License)
-  dovoluje šířit knihovny jen jako součást aplikace, je zdarma, ale Qualcomm ji může kdykoli
-  odvolat. Licenci zkompilovaných modelů z AI Hub je potřeba přečíst. Český fine-tune je Apache-2.0.
-- Pokrytí zařízení: NPU cesta jen Snapdragon (binárka pro každý čipset zvlášť); pro ostatní
-  telefony záloha (CPU/GPU, menší model).
-- Konkurence a odlišení: Gboard (zdarma, offline), Wispr Flow (cloud). Hlavní odlišení: kvalitní
-  přepis menších jazyků (čeština, slovenština, polština…) **offline na zařízení** – v cloudu je
-  zvládají dobře i Google a Whisper API, lokálně ne. Fine-tune pro jazyk + slovníček oboru,
-  soukromí (audio neopouští telefon), AI úprava na zařízení. Očekávání: malý doplňkový příjem.
-- Důkaz odlišení: změřit WER na stejných českých nahrávkách proti Gboardu a Wispr Flow.
+## Phase 4 – on-device text cleanup
+- A small language model (e.g. Gemma) after transcription: corrections, false starts,
+  punctuation, bullet lists, modes (e-mail, note, list).
+- Runtime candidates: Google AI Edge / LiteRT-LM (GPU), Qualcomm AI Hub + Genie (NPU). Pick by
+  language quality, latency and memory (Whisper ~2 GB + LLM within 11 GB RAM).

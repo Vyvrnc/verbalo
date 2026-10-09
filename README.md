@@ -1,20 +1,23 @@
 # Transcribro NPU (fork)
 
-Soukromý fork [soupslurpr/Transcribro](https://github.com/soupslurpr/Transcribro) (ISC). Rozpoznávání
-řeči běží na NPU (Hexagon) telefonu se Snapdragon 8 Elite (SM8750, Galaxy Z Fold 7): Whisper
-large-v3-turbo float16 z Qualcomm AI Hub přes QNN HTP. Engine je převzatý z
+Private fork of [soupslurpr/Transcribro](https://github.com/soupslurpr/Transcribro) (ISC). Speech
+recognition runs on the Hexagon NPU of Snapdragon 8 Elite phones (SM8750, Galaxy Z Fold 7):
+Whisper large-v3-turbo float16 from Qualcomm AI Hub through QNN HTP. The engine comes from
 [WhisperBench](https://github.com/Vyvrnc/WhisperBench) (`app/src/main/cpp/npu_whisper.cpp`).
 
-Oproti upstreamu:
-- whisper.cpp tiny.en (jen angličtina, CPU) je pryč; přepis dělá `cz.vyvrnc.transcribronpu.npu.NpuEngine`.
-- Jazyk z `RecognizerIntent.EXTRA_LANGUAGE`, jinak čeština.
-- Model (2,0 GB) se stahuje v aplikaci: Nastavení → NPU model, přímo od Qualcommu. Model ani QNN
-  knihovny nejsou open source (Qualcomm AI Hub licence), proto jen pro soukromé použití.
-- Model zůstává načtený mezi diktáty a uvolní se po 10 minutách nečinnosti.
-- Opraveno spojování segmentů (upstream je spojoval ", ").
+Changes against upstream:
+- whisper.cpp tiny.en (English only, CPU) is gone; `cz.vyvrnc.transcribronpu.npu.NpuEngine` transcribes.
+- Language from `RecognizerIntent.EXTRA_LANGUAGE`, Czech otherwise.
+- The model (2.0 GB) is downloaded in the app (Settings -> NPU model) straight from Qualcomm. Neither
+  the model nor the QNN libraries are open source (Qualcomm licences), so this is for private use.
+- The model stays loaded between dictations and is released after 10 idle minutes.
+- Segments are joined with a space (upstream joined them with ", ").
 
-Build: `bash tools/build-apk.sh` (Docker, image odvozený z WhisperBench), výstup a podpisový klíč
-v `C:\Users\vyvrn\Transcribro-build\`, mimo repo.
+Measured on a Galaxy Z Fold 7: model load 3.4 s once, then 7.2 s of Czech speech in 0.87 s and
+1.8 s in 0.62 s (the encoder always processes a full 30 s window).
+
+Build: `bash tools/build-apk.sh` (Docker, image derived from WhisperBench's); the APK and the
+signing key live outside the repo.
 
 ---
 
