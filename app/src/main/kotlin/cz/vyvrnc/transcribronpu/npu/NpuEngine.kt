@@ -41,25 +41,45 @@ object NpuEngine {
     }
 
     /**
-     * 16 kHz mono PCM -> text. [language] is a Whisper code ("cs", "en", ...) or "auto".
-     * Throws IllegalStateException when the model is missing or the NPU fails.
+     * 16 kHz mono PCM -> text. [language] is a Whisper code ("cs", "en", ...) or "auto";
+     * [prompt] are vocabulary tokens fed after <|startofprev|>. Throws IllegalStateException
+     * when the model is missing or the NPU fails.
      */
-    suspend fun transcribe(context: Context, pcm: FloatArray, language: String): String = withContext(Dispatchers.IO) {
-        val app = context.applicationContext
-        val ids = try {
-            mutex.withLock {
-                val h = ensureLoaded(app)
-                val t0 = System.nanoTime()
-                NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS).also {
-                    Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, loop cuts %d)".format(
-                        pcm.size / 16000f, it.size - 2, (System.nanoTime() - t0) / 1_000_000,
-                        WhisperTokenizer.langCode(it[0]), it[1]))
-                }
+    suspend fun transcribe(context: Context, pcm: FloatArray, language: String, prompt: IntArray? = null): String =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            try {
+                mutex.withLock { run(app, pcm, language, prompt) }
+            } finally {
+                scheduleIdleRelease()   // also after a failure, so the model is still released when idle
             }
-        } finally {
-            scheduleIdleRelease()   // also after a failure, so the model is still released when idle
         }
-        WhisperTokenizer.decode(app, ids.drop(2)).trim()
+
+    /**
+     * Like [transcribe] but returns null at once when the NPU is busy or not loaded yet:
+     * live previews must never queue in front of a final transcription.
+     */
+    suspend fun tryTranscribe(context: Context, pcm: FloatArray, language: String, prompt: IntArray? = null): String? =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            if (!mutex.tryLock()) return@withContext null
+            try {
+                if (handle == 0L) null else run(app, pcm, language, prompt)
+            } finally {
+                mutex.unlock()
+                scheduleIdleRelease()
+            }
+        }
+
+    /** Call with [mutex] held. */
+    private fun run(app: Context, pcm: FloatArray, language: String, prompt: IntArray?): String {
+        val h = ensureLoaded(app)
+        val t0 = System.nanoTime()
+        val ids = NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS, prompt)
+        Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, prompt %d, loop cuts %d)".format(
+            pcm.size / 16000f, ids.size - 2, (System.nanoTime() - t0) / 1_000_000,
+            WhisperTokenizer.langCode(ids[0]), prompt?.size ?: 0, ids[1]))
+        return WhisperTokenizer.decode(app, ids.drop(2)).trim()
     }
 
     /** Call with [mutex] held. */

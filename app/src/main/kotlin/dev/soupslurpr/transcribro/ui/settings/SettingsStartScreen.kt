@@ -54,6 +54,9 @@ fun SettingsStartScreen(
             NpuModelItem()
         }
         item {
+            NpuRecognitionSettings()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )

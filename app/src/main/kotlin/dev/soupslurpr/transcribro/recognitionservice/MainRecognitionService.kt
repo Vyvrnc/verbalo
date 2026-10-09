@@ -12,7 +12,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
 import cz.vyvrnc.transcribronpu.npu.NpuModel
-import cz.vyvrnc.transcribronpu.npu.WhisperTokenizer
+import cz.vyvrnc.transcribronpu.npu.NpuSettings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +60,8 @@ class MainRecognitionService : RecognitionService() {
 
     private val transcribeJobs = mutableListOf<Job>()
 
-    private val whisperRepository by lazy { WhisperRepository(applicationContext) }
+    /** Recreated per session, so changed settings (vocabulary, replacements) apply at once. */
+    @Volatile private var whisperRepository: WhisperRepository? = null
 
     /**
      * Transcribes one segment; a failure is logged, flagged in the session's [failed] and
@@ -68,7 +69,7 @@ class MainRecognitionService : RecognitionService() {
      */
     private suspend fun transcribeSegment(audio: ShortArray, language: String, failed: AtomicBoolean): String =
         try {
-            whisperRepository.transcribeAudio(audio, language)
+            whisperRepository!!.transcribeAudio(audio, language)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -112,24 +113,24 @@ class MainRecognitionService : RecognitionService() {
         val autoStopRecognition = recognizerIntent?.extras?.getBoolean(EXTRA_AUTO_STOP) ?: true
         val isPartialResults = recognizerIntent?.extras?.getBoolean(RecognizerIntent.EXTRA_PARTIAL_RESULTS)
         val speechStartPadMs = 24000
-        // Whisper language from the caller ("cs-CZ" -> "cs"); Czech when missing or unknown.
-        val language = recognizerIntent?.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE)
-            ?.substringBefore('-')?.substringBefore('_')?.lowercase()
-            ?.takeIf { WhisperTokenizer.langToken(it) >= 0 } ?: "cs"
+        val language = NpuSettings.resolveLanguage(this, recognizerIntent?.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
 
         if (!NpuModel.ready(this)) {
             // Nothing to transcribe with; the app's settings screen downloads the model.
             listener?.error(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
             return
         }
+        if (recordAndTranscribeJob?.isActive == true) {
+            // The previous session still records or transcribes; a second one would share
+            // its state (recording flag, job list).
+            listener?.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
+            return
+        }
+        val repository = WhisperRepository(applicationContext).also { whisperRepository = it }
         // Load the model onto the NPU while the user speaks (3-4 s on the first use).
-        whisperRepository.preload()
+        repository.preload()
         // Per session: a cancelled older session finishing late must not mark this one.
         val segmentFailed = AtomicBoolean(false)
-
-        if (recordAndTranscribeJob?.isActive == true) {
-            listener?.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
-        }
 
         val attributionContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             this.createContext(

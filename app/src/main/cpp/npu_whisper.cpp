@@ -45,7 +45,8 @@ namespace {
 
 // Token ids of the large-v3 vocabulary (openai/whisper-large-v3-turbo generation_config.json).
 constexpr int kEot = 50257, kSot = 50258, kLangFirst = 50259, kLangEnd = 50359;
-constexpr int kTranscribe = 50360, kNoTimestamps = 50364;
+constexpr int kTranscribe = 50360, kStartOfPrev = 50362, kNoTimestamps = 50364;
+constexpr size_t kMaxPromptTokens = 64;  // keeps >= 128 cache slots for the transcript
 constexpr int kDecodeLen = 200;          // attention_mask length; cache holds 199
 // generation_config "suppress_tokens" (all < kEot or special); specials are excluded anyway.
 constexpr int kSuppress[] = {1, 2, 7, 8, 9, 10, 14, 25, 26, 27, 28, 29, 31, 58, 59, 60, 61, 62, 63, 90,
@@ -447,7 +448,10 @@ public:
 
     bool shared() const { return rpc_ != nullptr; }
 
-    RunOut transcribe(const float * pcm, size_t n, int lang_token, int threads, RunToken & token) {
+    // prev: text tokens fed after <|startofprev|> (vocabulary hint), at most kMaxPromptTokens,
+    // the most recent kept.
+    RunOut transcribe(const float * pcm, size_t n, int lang_token, int threads, RunToken & token,
+                      const std::vector<int> & prev = {}) {
         RunOut r;
         const auto t_full = Clock::now();
         const size_t chunks = std::max<size_t>(1, (n + kChunkSamples - 1) / kChunkSamples);
@@ -465,7 +469,7 @@ public:
             r.encode_ms += ms_since(t0);
             r.encode_runs++;
 
-            decode_window(r, lang, token);
+            decode_window(r, lang, token, prev);
             if (r.lang_token < 0) r.lang_token = lang;
             token.progress = (int) ((c + 1) * 100 / chunks);
         }
@@ -594,9 +598,10 @@ private:
         return false;
     }
 
-    // Greedy decode of one window: prompt <|sot|> <|lang|> <|transcribe|> <|notimestamps|>,
-    // language picked from the logits after <|sot|> when not given (lang < 0).
-    void decode_window(RunOut & r, int & lang, RunToken & token) {
+    // Greedy decode of one window: prompt [<|startofprev|> prev...] <|sot|> <|lang|>
+    // <|transcribe|> <|notimestamps|>, language picked from the logits after <|sot|> when
+    // not given (lang < 0).
+    void decode_window(RunOut & r, int & lang, RunToken & token, const std::vector<int> & prev) {
         for (auto & p : self_) {
             memset(p.a->data, 0, p.a->bytes);
             bind(dec_, p.in, p.a);
@@ -604,9 +609,15 @@ private:
         }
         const size_t mask_n = mask_->bytes / dtype_size(mask_->dtype);
         std::vector<float> mask(mask_n, kMaskNeg);
-        std::vector<int> seq = {kSot};
-        const int prompt[] = {kSot, lang, kTranscribe, kNoTimestamps};
-        const int prompt_len = 4;
+        std::vector<int> prompt;
+        if (!prev.empty()) {
+            prompt.push_back(kStartOfPrev);
+            const size_t take = std::min(prev.size(), kMaxPromptTokens);
+            prompt.insert(prompt.end(), prev.end() - (std::ptrdiff_t) take, prev.end());
+        }
+        prompt.insert(prompt.end(), {kSot, lang, kTranscribe, kNoTimestamps});
+        const int prompt_len = (int) prompt.size();
+        std::vector<int> seq = {prompt[0]};
         bool first_generated = true;
         std::vector<int> window;   // tokens generated in this window
 
@@ -741,7 +752,8 @@ NPU_FN(jlong, open)(JNIEnv * env, jclass, jstring libDir, jstring encoderPath, j
 }
 
 // Returns [lang_token, loop_cuts, text tokens...]; langToken -1 detects the language.
-NPU_FN(jintArray, transcribe)(JNIEnv * env, jclass, jlong handle, jfloatArray pcm, jint langToken, jint threads) {
+NPU_FN(jintArray, transcribe)(JNIEnv * env, jclass, jlong handle, jfloatArray pcm, jint langToken, jint threads,
+                              jintArray prompt) {
 #ifndef WB_HAVE_QNN
     throw_java(env, "Aplikace byla sestavena bez hlaviček QNN");
     return nullptr;
@@ -752,10 +764,16 @@ NPU_FN(jintArray, transcribe)(JNIEnv * env, jclass, jlong handle, jfloatArray pc
     const jsize n = env->GetArrayLength(pcm);
     std::vector<float> samples((size_t) n);
     env->GetFloatArrayRegion(pcm, 0, n, samples.data());
+    std::vector<int> prev;
+    if (prompt) {
+        prev.resize((size_t) env->GetArrayLength(prompt));
+        static_assert(sizeof(jint) == sizeof(int), "jint");
+        env->GetIntArrayRegion(prompt, 0, (jsize) prev.size(), reinterpret_cast<jint *>(prev.data()));
+    }
     try {
         std::lock_guard<std::mutex> lock(e->mutex);
         RunToken token;
-        const RunOut r = e->w->transcribe(samples.data(), samples.size(), langToken, threads, token);
+        const RunOut r = e->w->transcribe(samples.data(), samples.size(), langToken, threads, token, prev);
         std::vector<jint> out;
         out.reserve(r.tokens.size() + 2);
         out.push_back(r.lang_token);

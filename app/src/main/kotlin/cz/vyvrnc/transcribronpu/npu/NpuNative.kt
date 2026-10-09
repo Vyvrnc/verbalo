@@ -9,8 +9,11 @@ internal object NpuNative {
     /** Loads encoder + decoder onto the HTP; throws IllegalStateException with the reason. */
     @JvmStatic external fun open(libDir: String, encoderPath: String, decoderPath: String): Long
 
-    /** [lang token, loop cuts, text tokens...]; [langToken] -1 detects the language. */
-    @JvmStatic external fun transcribe(handle: Long, pcm: FloatArray, langToken: Int, threads: Int): IntArray
+    /**
+     * [lang token, loop cuts, text tokens...]; [langToken] -1 detects the language. [prompt]
+     * (may be null) are text tokens fed after <|startofprev|>, at most the last 64 are used.
+     */
+    @JvmStatic external fun transcribe(handle: Long, pcm: FloatArray, langToken: Int, threads: Int, prompt: IntArray?): IntArray
 
     @JvmStatic external fun info(handle: Long): String
 
