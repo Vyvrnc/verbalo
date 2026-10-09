@@ -1,3 +1,23 @@
+# Transcribro NPU (fork)
+
+Soukromý fork [soupslurpr/Transcribro](https://github.com/soupslurpr/Transcribro) (ISC). Rozpoznávání
+řeči běží na NPU (Hexagon) telefonu se Snapdragon 8 Elite (SM8750, Galaxy Z Fold 7): Whisper
+large-v3-turbo float16 z Qualcomm AI Hub přes QNN HTP. Engine je převzatý z
+[WhisperBench](https://github.com/Vyvrnc/WhisperBench) (`app/src/main/cpp/npu_whisper.cpp`).
+
+Oproti upstreamu:
+- whisper.cpp tiny.en (jen angličtina, CPU) je pryč; přepis dělá `cz.vyvrnc.transcribronpu.npu.NpuEngine`.
+- Jazyk z `RecognizerIntent.EXTRA_LANGUAGE`, jinak čeština.
+- Model (2,0 GB) se stahuje v aplikaci: Nastavení → NPU model, přímo od Qualcommu. Model ani QNN
+  knihovny nejsou open source (Qualcomm AI Hub licence), proto jen pro soukromé použití.
+- Model zůstává načtený mezi diktáty a uvolní se po 10 minutách nečinnosti.
+- Opraveno spojování segmentů (upstream je spojoval ", ").
+
+Build: `bash tools/build-apk.sh` (Docker, image odvozený z WhisperBench), výstup a podpisový klíč
+v `C:\Users\vyvrn\Transcribro-build\`, mimo repo.
+
+---
+
 # Transcribro
 
 Transcribro is a private and on-device speech recognition keyboard and service for Android.\

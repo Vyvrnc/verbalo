@@ -1,2 +1,4 @@
-app/src/main/assets/transcribro_rs-third-party-licenses.html linguist-detectable=false
-transcribro_rs/about.hbs linguist-detectable=false
+# Shell scripts run inside the Linux build container; the vocab is parsed line by line.
+*.sh text eol=lf
+gradlew text eol=lf
+*.tiktoken -text

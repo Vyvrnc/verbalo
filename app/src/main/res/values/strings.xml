@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Transcribro</string>
+    <string name="app_name">Transcribro NPU</string>
     <string name="settings">Settings</string>
     <string name="welcome">Welcome to Transcribro!</string>
     <string name="welcome_april_fools">Welcome to Transcribruh!</string>

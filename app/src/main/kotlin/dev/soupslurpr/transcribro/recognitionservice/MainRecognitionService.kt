@@ -10,17 +10,17 @@ import android.os.RemoteException
 import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
+import cz.vyvrnc.transcribronpu.npu.NpuModel
+import cz.vyvrnc.transcribronpu.npu.WhisperTokenizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.whispercpp.whisper.WhisperContext
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadApi
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadDetector
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadLocalDataSource
 import dev.soupslurpr.transcribro.recognitionservice.silerovad.SileroVadRepository
-import dev.soupslurpr.transcribro.recognitionservice.whisper.WhisperApi
-import dev.soupslurpr.transcribro.recognitionservice.whisper.WhisperLocalDataSource
 import dev.soupslurpr.transcribro.recognitionservice.whisper.WhisperRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -59,21 +59,13 @@ class MainRecognitionService : RecognitionService() {
 
     private val transcribeJobs = mutableListOf<Job>()
 
-    private val whisperRepository: WhisperRepository =
-        WhisperRepository(
-            WhisperLocalDataSource(
-                whisperApi =
-                object : WhisperApi {
-                    override fun getWhisperContext(): WhisperContext {
-                        return WhisperContext.createContextFromAsset(
-                            application.assets,
-                            "models/whisper/ggml-model-whisper-tiny.en-q8_0.bin"
-                        )
-                    }
-                },
-                ioDispatcher = Dispatchers.IO,
-            )
-        )
+    private val whisperRepository by lazy { WhisperRepository(applicationContext) }
+
+    /** Transcribes one segment; a failure is logged and yields no text instead of a crash. */
+    private suspend fun transcribeSegment(audio: ShortArray, language: String): String =
+        runCatching { whisperRepository.transcribeAudio(audio, language) }
+            .onFailure { Log.e("MainRecognitionService", "NPU transcription failed", it) }
+            .getOrDefault("")
 
     private val sileroVadRepository = SileroVadRepository(
         SileroVadLocalDataSource(
@@ -110,6 +102,18 @@ class MainRecognitionService : RecognitionService() {
         val autoStopRecognition = recognizerIntent?.extras?.getBoolean(EXTRA_AUTO_STOP) ?: true
         val isPartialResults = recognizerIntent?.extras?.getBoolean(RecognizerIntent.EXTRA_PARTIAL_RESULTS)
         val speechStartPadMs = 24000
+        // Whisper language from the caller ("cs-CZ" -> "cs"); Czech when missing or unknown.
+        val language = recognizerIntent?.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE)
+            ?.substringBefore('-')?.substringBefore('_')?.lowercase()
+            ?.takeIf { WhisperTokenizer.langToken(it) >= 0 } ?: "cs"
+
+        if (!NpuModel.ready(this)) {
+            // Nothing to transcribe with; the app's settings screen downloads the model.
+            listener?.error(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
+            return
+        }
+        // Load the model onto the NPU while the user speaks (3-4 s on the first use).
+        whisperRepository.preload()
 
         if (recordAndTranscribeJob?.isActive == true) {
             listener?.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
@@ -298,13 +302,14 @@ class MainRecognitionService : RecognitionService() {
                             val timeBeforeTranscription = currentTimeMillis()
 
                             val transcriptionText =
-                                whisperRepository.transcribeAudio(
+                                transcribeSegment(
                                     transcription.audioData.slice(
                                         ((transcription.start!!.toInt() - speechStartPadMs).coerceAtLeast(
                                             0
                                         ))..((transcription.end!!.toInt()).coerceAtMost(transcription.audioData.size - 1))
                                     )
                                         .toShortArray(),
+                                    language,
                                 )
 
                             transcription.text = transcriptionText
@@ -372,13 +377,14 @@ class MainRecognitionService : RecognitionService() {
                                             val timeBeforeTranscription = currentTimeMillis()
 
                                             transcription.text =
-                                                whisperRepository.transcribeAudio(
+                                                transcribeSegment(
                                                     transcription.audioData.slice(
                                                         ((transcription.start!!.toInt() - speechStartPadMs).coerceAtLeast(
                                                             0
                                                         ))..((transcription.end!!.toInt()).coerceAtMost(transcription.audioData.size - 1))
                                                     )
                                                         .toShortArray(),
+                                                    language,
                                                 )
 
                                             totalTranscriptionTime += currentTimeMillis() - timeBeforeTranscription
@@ -449,7 +455,9 @@ class MainRecognitionService : RecognitionService() {
                 return@recordAndTranscribe
             }
 
-            val transcription = transcriptions.toSortedMap().values.joinToString { it.text ?: "" }
+            val transcription = transcriptions.toSortedMap().values
+                .mapNotNull { it.text?.trim()?.takeIf(String::isNotEmpty) }
+                .joinToString(" ")
 
             val bundle = Bundle().apply {
                 putStringArrayList(
@@ -487,8 +495,8 @@ class MainRecognitionService : RecognitionService() {
         transcribeJobs.forEach {
             it.cancel()
         }
+        // The NPU model stays loaded process-wide (NpuEngine releases it when idle).
         runBlocking {
-            whisperRepository.release()
             sileroVadRepository.release()
         }
     }

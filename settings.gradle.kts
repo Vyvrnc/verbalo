@@ -15,4 +15,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Transcribro"
 include(":app")
-include(":lib")

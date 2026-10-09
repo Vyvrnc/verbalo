@@ -26,3 +26,5 @@
 #-dontwarn java.awt.HeadlessException
 #-dontwarn java.awt.Window
 -keep class ai.onnxruntime.** { *; }
+# JNI symbols are resolved by class and method name.
+-keep class cz.vyvrnc.transcribronpu.npu.NpuNative { *; }

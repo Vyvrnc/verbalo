@@ -48,6 +48,12 @@ fun SettingsStartScreen(
             .fillMaxSize()
     ) {
         item {
+            SettingsCategory("Rozpoznávání řeči (NPU)")
+        }
+        item {
+            NpuModelItem()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )
