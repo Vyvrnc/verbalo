@@ -2,6 +2,7 @@ package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
 import android.content.SharedPreferences
+import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 
 /**
  * Recognition settings read by the recognition service at the start of every session.
@@ -14,6 +15,7 @@ object NpuSettings {
     private const val KEY_VOCABULARY = "vocabulary"
     private const val KEY_REPLACEMENTS = "replacements"
     private const val KEY_LIVE = "live_partials"
+    private const val KEY_CLEANUP = "cleanup_mode"
 
     /** Language from the calling app (RecognizerIntent.EXTRA_LANGUAGE), Czech without one. */
     const val LANGUAGE_FROM_CALLER = "caller"
@@ -48,6 +50,14 @@ object NpuSettings {
     /** Show unfinished text while speaking (our keyboard and floating button only). */
     fun livePartials(context: Context): Boolean = prefs(context).getBoolean(KEY_LIVE, true)
     fun setLivePartials(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_LIVE, value).apply()
+
+    /** Gemma text cleanup for the floating button (LlmCleaner.Mode name). */
+    fun cleanupMode(context: Context): LlmCleaner.Mode =
+        prefs(context).getString(KEY_CLEANUP, null)
+            ?.let { name -> LlmCleaner.Mode.entries.firstOrNull { it.name == name } }
+            ?: LlmCleaner.Mode.OFF
+    fun setCleanupMode(context: Context, value: LlmCleaner.Mode) =
+        prefs(context).edit().putString(KEY_CLEANUP, value.name).apply()
 
     /**
      * Whisper language code for a session: the setting, or for [LANGUAGE_FROM_CALLER] the

@@ -28,3 +28,5 @@
 -keep class ai.onnxruntime.** { *; }
 # JNI symbols are resolved by class and method name.
 -keep class cz.vyvrnc.transcribronpu.npu.NpuNative { *; }
+# LiteRT-LM: JNI callbacks and Gson (de)serialisation by member names.
+-keep class com.google.ai.edge.litertlm.** { *; }

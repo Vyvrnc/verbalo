@@ -30,6 +30,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import cz.vyvrnc.transcribronpu.llm.LlmCleaner
+import cz.vyvrnc.transcribronpu.llm.LlmModel
+import cz.vyvrnc.transcribronpu.npu.NpuSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,6 +78,11 @@ class FloatingDictationService : Service() {
     private var bubble: TextView? = null
     private var recognizer: SpeechRecognizer? = null
     private var dictating = false
+    /** Gemma cleanup for this dictation; segments are then inserted only after it. */
+    private var cleanup = LlmCleaner.Mode.OFF
+    /** A finished dictation is being cleaned up; a new one waits for it. */
+    private var cleaning = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** Final text of this dictation so far, and whether some of it could not be inserted. */
     private val sessionText = StringBuilder()
@@ -104,6 +117,7 @@ class FloatingDictationService : Service() {
 
     override fun onDestroy() {
         _running.value = false
+        scope.cancel()
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
@@ -209,6 +223,7 @@ class FloatingDictationService : Service() {
     }
 
     private fun toggleDictation() {
+        if (cleaning) return
         if (dictating) {
             recognizer?.stopListening()
             showBubble("Dokončuji přepis…")
@@ -222,6 +237,8 @@ class FloatingDictationService : Service() {
         }
         sessionText.clear()
         insertFailed = false
+        cleanup = NpuSettings.cleanupMode(this).takeIf { LlmModel.ready(this) } ?: LlmCleaner.Mode.OFF
+        if (cleanup != LlmCleaner.Mode.OFF) LlmCleaner.preload(this)
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble("Poslouchám…")
@@ -236,6 +253,25 @@ class FloatingDictationService : Service() {
     private fun finishDictation(message: String?) {
         dictating = false
         button?.let { paintButton(it, false) }
+        if (cleanup != LlmCleaner.Mode.OFF && sessionText.isNotEmpty()) {
+            val raw = sessionText.toString()
+            val mode = cleanup
+            showBubble("Upravuji text…")
+            cleaning = true
+            scope.launch {
+                val cleaned = LlmCleaner.clean(this@FloatingDictationService, raw, mode)
+                sessionText.setLength(0)
+                sessionText.append(cleaned)
+                if (TextInsertionService.insert(cleaned) != true) insertFailed = true
+                cleaning = false
+                deliverEnd(message)
+            }
+            return
+        }
+        deliverEnd(message)
+    }
+
+    private fun deliverEnd(message: String?) {
         if (insertFailed && sessionText.isNotEmpty()) {
             getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("Diktát", sessionText.toString()))
@@ -264,7 +300,8 @@ class FloatingDictationService : Service() {
             // A finished segment goes into the field right away.
             if (sessionText.isNotEmpty()) sessionText.append(' ')
             sessionText.append(text)
-            if (!insertFailed && TextInsertionService.insert(text) != true) insertFailed = true
+            // With cleanup the whole dictation is inserted at the end instead.
+            if (cleanup == LlmCleaner.Mode.OFF && !insertFailed && TextInsertionService.insert(text) != true) insertFailed = true
             showBubble(sessionText.takeLast(160).toString())
         }
 

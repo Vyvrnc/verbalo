@@ -12,6 +12,15 @@ Changes against upstream:
   the model nor the QNN libraries are open source (Qualcomm licences), so this is for private use.
 - The model stays loaded between dictations and is released after 10 idle minutes.
 - Segments are joined with a space (upstream joined them with ", ").
+- Settings -> recognition: language (from the calling app, a fixed one or auto-detect), a vocabulary
+  fed to Whisper as a prompt (`<|startofprev|>`), and a replacement dictionary ("heard => written").
+- Dictation longer than 30 s is cut at the quietest moment before each window ends.
+- Live preview: the voice keyboard shows unfinished text (composing text) while you speak.
+- Floating dictation button over all apps (overlay + microphone foreground service, started from the
+  settings). An optional accessibility service puts the text into the focused field; without it the
+  text goes to the clipboard.
+- Optional on-device cleanup of the floating button's dictation with Gemma 4 E2B (LiteRT-LM, GPU,
+  Apache 2.0, 2.6 GB downloaded in the app): fix, bullet list or e-mail.
 
 Measured on a Galaxy Z Fold 7: model load 3.4 s once, then 7.2 s of Czech speech in 0.87 s and
 1.8 s in 0.62 s (the encoder always processes a full 30 s window).

@@ -63,6 +63,9 @@ fun SettingsStartScreen(
             FloatingSettings()
         }
         item {
+            CleanupSettings()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )

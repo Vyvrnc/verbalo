@@ -35,6 +35,9 @@
         <!-- FastRPC client from the vendor partition; apps targeting S+ must declare it, otherwise
              the linker namespace hides it and QNN cannot load its DSP stub. -->
         <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+        <!-- GPU backend of LiteRT-LM (Gemma text cleanup); without them it falls back to CPU. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <service
             android:name=".recognitionservice.MainRecognitionService"
             android:exported="true"

@@ -3,7 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.3.21"
 }
 
 // Release signing comes from a properties file OUTSIDE the repo, mounted into the build
@@ -61,8 +61,8 @@ android {
         // The NPU path (QNN HTP v79) exists only on SM8750-class phones running Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -104,9 +104,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -156,6 +153,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
 
     implementation("androidx.core:core-ktx:1.16.0")
@@ -176,4 +179,6 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    // Gemma text cleanup (Apache 2.0). Its classes carry Kotlin 2.4 metadata, hence Kotlin 2.3.
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
 }
