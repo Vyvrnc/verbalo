@@ -42,6 +42,18 @@ private data class Transcription(
 class MainRecognitionService : RecognitionService() {
     companion object {
         const val EXTRA_AUTO_STOP = "dev.soupslurpr.transcribro.EXTRA_AUTO_STOP"
+
+        /**
+         * Request extra (with EXTRA_PARTIAL_RESULTS): also send unfinished text of the segment
+         * being spoken. Such partial results carry [LIVE_PARTIAL] = true and replace each other
+         * until the segment's final partial result (without the flag) arrives. Only our own
+         * clients ask for it: other apps keep upstream's one-partial-per-segment behaviour.
+         */
+        const val EXTRA_LIVE_PARTIALS = "cz.vyvrnc.transcribronpu.EXTRA_LIVE_PARTIALS"
+        const val LIVE_PARTIAL = "cz.vyvrnc.transcribronpu.LIVE_PARTIAL"
+
+        private const val LIVE_INTERVAL_MS = 900L
+        private const val LIVE_MIN_SAMPLES = 16000 * 3 / 4
     }
 
     private val recordAndTranscribeScope = CoroutineScope(Dispatchers.IO)
@@ -59,6 +71,8 @@ class MainRecognitionService : RecognitionService() {
     private var stopListening by mutableStateOf(false)
 
     private val transcribeJobs = mutableListOf<Job>()
+
+    @Volatile private var liveJob: Job? = null
 
     /** Recreated per session, so changed settings (vocabulary, replacements) apply at once. */
     @Volatile private var whisperRepository: WhisperRepository? = null
@@ -114,6 +128,8 @@ class MainRecognitionService : RecognitionService() {
         val isPartialResults = recognizerIntent?.extras?.getBoolean(RecognizerIntent.EXTRA_PARTIAL_RESULTS)
         val speechStartPadMs = 24000
         val language = NpuSettings.resolveLanguage(this, recognizerIntent?.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE))
+        val live = isPartialResults == true && recognizerIntent?.getBooleanExtra(EXTRA_LIVE_PARTIALS, false) == true &&
+            NpuSettings.livePartials(this)
 
         if (!NpuModel.ready(this)) {
             // Nothing to transcribe with; the app's settings screen downloads the model.
@@ -263,6 +279,7 @@ class MainRecognitionService : RecognitionService() {
             transcribeJobs.clear()
             val transcriptions = mutableMapOf<Int, Transcription>()
             var transcriptionIndex by mutableIntStateOf(0)
+            var lastLiveAt = 0L
 
             listener?.readyForSpeech(Bundle())
 
@@ -276,6 +293,43 @@ class MainRecognitionService : RecognitionService() {
                         transcriptions[transcriptionIndex] = Transcription(start = null, end = null, text = null)
                     }
                     transcriptions[transcriptionIndex]!!.audioData.add(buffer[i])
+                }
+
+                if (live && liveJob?.isActive != true && currentTimeMillis() - lastLiveAt >= LIVE_INTERVAL_MS) {
+                    // Snapshot here, in the loop that appends the audio. A segment whose end
+                    // is set belongs to its final transcription job and is not touched.
+                    val transcription = transcriptions[transcriptionIndex]
+                    val start = transcription?.start
+                    if (transcription != null && start != null && transcription.end == null) {
+                        val data = transcription.audioData
+                        val from = (start.toInt() - speechStartPadMs).coerceIn(0, data.size)
+                        val audio = ShortArray(data.size - from) { data[from + it] }
+                        if (audio.size >= LIVE_MIN_SAMPLES) {
+                            lastLiveAt = currentTimeMillis()
+                            liveJob = transcribeScope.launch {
+                                val text = try {
+                                    repository.transcribePartial(audio, language)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w("MainRecognitionService", "live transcription failed", e)
+                                    null
+                                }
+                                if (text.isNullOrEmpty() || !isActive) return@launch
+                                // Under the segment's lock, so it cannot overtake the final
+                                // result: once end is set no live text is sent for it.
+                                synchronized(transcription) {
+                                    if (transcription.end != null) return@launch
+                                    runCatching {
+                                        listener?.partialResults(Bundle().apply {
+                                            putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text))
+                                            putBoolean(LIVE_PARTIAL, true)
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (!isActive) {
@@ -308,8 +362,9 @@ class MainRecognitionService : RecognitionService() {
                             transcription.start = 0.toDouble()
                         }
 
-                        transcriptions[transcriptionIndex]!!.end =
-                            (transcriptions[transcriptionIndex]!!.audioData.size - 1).toDouble()
+                        synchronized(transcription) {
+                            transcription.end = (transcription.audioData.size - 1).toDouble()
+                        }
 
                         val transcribeJob = transcribeScope.launch {
                             val timeBeforeTranscription = currentTimeMillis()
@@ -343,7 +398,7 @@ class MainRecognitionService : RecognitionService() {
                                     putStringArrayList(
                                         SpeechRecognizer.RESULTS_RECOGNITION,
                                         arrayListOf(
-                                            transcription.text!!
+                                            segmentPartial(transcription.text!!)
                                         )
                                     )
                                 }
@@ -385,7 +440,7 @@ class MainRecognitionService : RecognitionService() {
                                         isSpeaking = false
                                         listener?.endOfSpeech()
 
-                                        transcription.end = it.value
+                                        synchronized(transcription) { transcription.end = it.value }
 
                                         val transcribeJob = transcribeScope.launch {
                                             val timeBeforeTranscription = currentTimeMillis()
@@ -417,7 +472,7 @@ class MainRecognitionService : RecognitionService() {
                                                     putStringArrayList(
                                                         SpeechRecognizer.RESULTS_RECOGNITION,
                                                         arrayListOf(
-                                                            transcription.text!!
+                                                            segmentPartial(transcription.text!!)
                                                         )
                                                     )
                                                 }
@@ -503,7 +558,15 @@ class MainRecognitionService : RecognitionService() {
         }
     }
 
+    /**
+     * A segment's text for the per-segment partial result. The NPU engine trims its output,
+     * so the separating space is put back here (the keyboard drops it where not needed),
+     * otherwise consecutive segments were glued together ("Snad.Wow").
+     */
+    private fun segmentPartial(text: String): String = text.trim().let { if (it.isEmpty()) "" else " $it" }
+
     override fun onCancel(listener: Callback?) {
+        liveJob?.cancel()
         recordAndTranscribeJob?.cancel()
         transcribeJobs.forEach {
             it.cancel()
@@ -517,6 +580,7 @@ class MainRecognitionService : RecognitionService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        liveJob?.cancel()
         recordAndTranscribeJob?.cancel()
         transcribeJobs.forEach {
             it.cancel()

@@ -271,6 +271,7 @@ class VoiceInput : InputMethodService() {
                                                 }
 
                                                 override fun onError(error: Int) {
+                                                    currentInputConnection?.let { clearLiveText(it) }
                                                     when (error) {
                                                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                                                             showInsufficientPermissionsError = true
@@ -292,6 +293,11 @@ class VoiceInput : InputMethodService() {
 
                                                 override fun onResults(results: Bundle?) {
                                                     isRecognizing = false
+                                                    // A preview whose segment never got a final text is kept.
+                                                    if (liveTextShown) {
+                                                        currentInputConnection?.finishComposingText()
+                                                        liveTextShown = false
+                                                    }
 
                                                     if (audioManager.ringerMode == AudioManager.RINGER_MODE_NORMAL) {
                                                         stoppedRecognitionMediaPlayer.start()
@@ -308,6 +314,13 @@ class VoiceInput : InputMethodService() {
                                                             val transcription = partialResults.getStringArrayList(
                                                                 SpeechRecognizer.RESULTS_RECOGNITION
                                                             )?.get(0) ?: ""
+
+                                                            if (partialResults.getBoolean(MainRecognitionService.LIVE_PARTIAL)) {
+                                                                showLiveText(ic, transcription)
+                                                                return
+                                                            }
+                                                            // The segment's final text replaces its live preview.
+                                                            clearLiveText(ic)
 
                                                             if (transcription.isNotEmpty()) {
                                                                 var textToCommit = if ((ic.getTextBeforeCursor(
@@ -475,6 +488,7 @@ class VoiceInput : InputMethodService() {
                                                     OutlinedIconButton(
                                                         onClick = {
                                                             speechRecognizer.value?.cancel()
+                                                            currentInputConnection?.let { clearLiveText(it) }
                                                             isRecognizing = false
 
                                                             val intent = context.packageManager
@@ -500,6 +514,7 @@ class VoiceInput : InputMethodService() {
                                                     FilledTonalIconButton(
                                                         onClick = {
                                                             speechRecognizer.value?.cancel()
+                                                            currentInputConnection?.let { clearLiveText(it) }
                                                             isRecognizing = false
                                                             switchToPreviousInputMethod()
                                                         },
@@ -520,6 +535,7 @@ class VoiceInput : InputMethodService() {
                                                     onClick = {
                                                         if (isRecognizing) {
                                                             speechRecognizer.value?.cancel()
+                                                            currentInputConnection?.let { clearLiveText(it) }
                                                             isRecognizing = false
                                                         }
                                                     },
@@ -932,6 +948,8 @@ class VoiceInput : InputMethodService() {
     }
 
     override fun onFinishInput() {
+        // The editor finishes any composing text itself when input ends.
+        liveTextShown = false
         speechRecognizer.value?.cancel()
         isRecognizing = false
     }
@@ -945,9 +963,35 @@ class VoiceInput : InputMethodService() {
         speechRecognizer.value = null
     }
 
+    /** Whether unfinished (composing) text from a live partial result is in the editor. */
+    private var liveTextShown = false
+    private var liveTextPrefix = ""
+
+    /** Shows unfinished text as composing text; the next live result replaces it. */
+    private fun showLiveText(ic: InputConnection, text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        if (!liveTextShown) {
+            // Decided once per segment from the text before the preview, which the
+            // composing text itself would otherwise change.
+            val before = ic.getTextBeforeCursor(1, 0)
+            liveTextPrefix = if (before.isNullOrEmpty() || before.last().isWhitespace()) "" else " "
+        }
+        ic.setComposingText(liveTextPrefix + trimmed, 1)
+        liveTextShown = true
+    }
+
+    private fun clearLiveText(ic: InputConnection) {
+        if (!liveTextShown) return
+        ic.setComposingText("", 1)
+        ic.finishComposingText()
+        liveTextShown = false
+    }
+
     private fun getStartListeningIntent(longForm: Boolean): Intent {
         return Intent().apply {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(MainRecognitionService.EXTRA_LIVE_PARTIALS, true)
             putExtra(MainRecognitionService.EXTRA_AUTO_STOP, longForm)
         }
     }
