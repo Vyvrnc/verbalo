@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Model downloads keep running in the background (dataSync foreground service). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <queries>
         <intent>
@@ -69,6 +72,10 @@
             android:name="cz.vyvrnc.transcribronpu.floating.FloatingDictationService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <service
+            android:name="cz.vyvrnc.transcribronpu.download.ModelDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <service
             android:name="cz.vyvrnc.transcribronpu.floating.TextInsertionService"
             android:exported="false"

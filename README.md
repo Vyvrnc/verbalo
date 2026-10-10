@@ -20,7 +20,10 @@ Changes against upstream:
   settings). An optional accessibility service puts the text into the focused field; without it the
   text goes to the clipboard.
 - Optional on-device cleanup of the floating button's dictation with Gemma 4 E2B (LiteRT-LM, GPU,
-  Apache 2.0, 2.6 GB downloaded in the app): fix, bullet list or e-mail.
+  Apache 2.0, 2.6 GB downloaded in the app). A single switch: the model fixes recognition errors,
+  punctuation and self-corrections and picks the form itself (list, e-mail, chat message) from the
+  content and the app the text goes into.
+- Model downloads run in a foreground service, so they continue in the background.
 
 Measured on a Galaxy Z Fold 7: model load 3.4 s once, then 7.2 s of Czech speech in 0.87 s and
 1.8 s in 0.62 s (the encoder always processes a full 30 s window).

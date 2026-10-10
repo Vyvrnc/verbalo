@@ -8,11 +8,12 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 
 /**
  * Inserts dictated text into the focused text field of any app, at the cursor (replacing a
  * selection). Used only by the floating button; it reads no screen content beyond the
- * focused field and keeps nothing.
+ * focused field (its app, hint and text, as context for the on-device cleanup) and keeps nothing.
  */
 class TextInsertionService : AccessibilityService() {
     companion object {
@@ -20,6 +21,9 @@ class TextInsertionService : AccessibilityService() {
 
         /** True when inserted, false when there is no editable focused field, null when the service is off. */
         fun insert(text: String): Boolean? = instance?.insertText(text)
+
+        /** The focused field's app, hint and text before the cursor, for the cleanup prompt. */
+        fun target(): LlmCleaner.Target? = instance?.focusedTarget()
 
         fun enabled(context: Context): Boolean {
             val list = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
@@ -45,6 +49,17 @@ class TextInsertionService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {}
+
+    private fun focusedTarget(): LlmCleaner.Target? {
+        val node = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: return null
+        val pkg = node.packageName?.toString() ?: return null
+        val label = runCatching {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        }.getOrNull()
+        val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        val cursor = node.textSelectionStart.takeIf { it in 0..current.length } ?: current.length
+        return LlmCleaner.Target(pkg, label, node.hintText?.toString(), current.substring(0, cursor).takeLast(300))
+    }
 
     private fun insertText(text: String): Boolean {
         val node = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: return false

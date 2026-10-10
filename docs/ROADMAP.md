@@ -11,6 +11,9 @@
   - Phase 3: floating dictation button (overlay, microphone foreground service, accessibility text
     insertion with clipboard fallback).
   - Phase 4: Gemma 4 E2B cleanup of the floating button's dictation (LiteRT-LM on the GPU).
+- 0.2.1: downloads in a dataSync foreground service (survive leaving the app / screen off); cleanup is
+  an on/off switch, the format is inferred from the content and the target app (package, field hint,
+  text before the cursor), like Wispr Flow's context-aware formatting.
 
 ## Next
 - Field test on the Fold: first and later dictations, live preview latency, battery and temperature,
@@ -21,4 +24,6 @@
 - Cleanup also in the voice keyboard (needs whole-dictation insertion instead of per-segment commits).
 - Gemma on the NPU (`gemma-4-E2B-it_qualcomm_sm8750.litertlm`) if GPU latency or battery is a problem;
   check memory next to Whisper (~2 GB DSP-mapped).
+- Cleanup: per-app tone preference (casual / formal), like Wispr Flow's styles, if the automatic
+  choice is not enough.
 - Floating button: start after reboot from a notification action; hold-to-talk mode.

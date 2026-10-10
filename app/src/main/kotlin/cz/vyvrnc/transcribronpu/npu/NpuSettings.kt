@@ -2,7 +2,6 @@ package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
 import android.content.SharedPreferences
-import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 
 /**
  * Recognition settings read by the recognition service at the start of every session.
@@ -15,7 +14,8 @@ object NpuSettings {
     private const val KEY_VOCABULARY = "vocabulary"
     private const val KEY_REPLACEMENTS = "replacements"
     private const val KEY_LIVE = "live_partials"
-    private const val KEY_CLEANUP = "cleanup_mode"
+    private const val KEY_CLEANUP_MODE = "cleanup_mode"
+    private const val KEY_CLEANUP = "cleanup"
 
     /** Language from the calling app (RecognizerIntent.EXTRA_LANGUAGE), Czech without one. */
     const val LANGUAGE_FROM_CALLER = "caller"
@@ -51,13 +51,16 @@ object NpuSettings {
     fun livePartials(context: Context): Boolean = prefs(context).getBoolean(KEY_LIVE, true)
     fun setLivePartials(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_LIVE, value).apply()
 
-    /** Gemma text cleanup for the floating button (LlmCleaner.Mode name). */
-    fun cleanupMode(context: Context): LlmCleaner.Mode =
-        prefs(context).getString(KEY_CLEANUP, null)
-            ?.let { name -> LlmCleaner.Mode.entries.firstOrNull { it.name == name } }
-            ?: LlmCleaner.Mode.OFF
-    fun setCleanupMode(context: Context, value: LlmCleaner.Mode) =
-        prefs(context).edit().putString(KEY_CLEANUP, value.name).apply()
+    /**
+     * Gemma text cleanup for the floating button. 0.2.0 stored a mode name under
+     * [KEY_CLEANUP_MODE]; any mode other than "OFF" counts as on.
+     */
+    fun cleanup(context: Context): Boolean {
+        val p = prefs(context)
+        if (p.contains(KEY_CLEANUP)) return p.getBoolean(KEY_CLEANUP, false)
+        return p.getString(KEY_CLEANUP_MODE, null).let { it != null && it != "OFF" }
+    }
+    fun setCleanup(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_CLEANUP, value).apply()
 
     /**
      * Whisper language code for a session: the setting, or for [LANGUAGE_FROM_CALLER] the

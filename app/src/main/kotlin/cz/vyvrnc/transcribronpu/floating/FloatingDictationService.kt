@@ -79,7 +79,9 @@ class FloatingDictationService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var dictating = false
     /** Gemma cleanup for this dictation; segments are then inserted only after it. */
-    private var cleanup = LlmCleaner.Mode.OFF
+    private var cleanup = false
+    /** The field the dictation started in, captured before the bubble appears. */
+    private var target: LlmCleaner.Target? = null
     /** A finished dictation is being cleaned up; a new one waits for it. */
     private var cleaning = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -238,8 +240,9 @@ class FloatingDictationService : Service() {
         sessionText.clear()
         insertFailed = false
         bubbleDismissed = false
-        cleanup = NpuSettings.cleanupMode(this).takeIf { LlmModel.ready(this) } ?: LlmCleaner.Mode.OFF
-        if (cleanup != LlmCleaner.Mode.OFF) LlmCleaner.preload(this)
+        cleanup = NpuSettings.cleanup(this) && LlmModel.ready(this)
+        target = if (cleanup) TextInsertionService.target() else null
+        if (cleanup) LlmCleaner.preload(this)
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble("Poslouchám…")
@@ -254,13 +257,13 @@ class FloatingDictationService : Service() {
     private fun finishDictation(message: String?) {
         dictating = false
         button?.let { paintButton(it, false) }
-        if (cleanup != LlmCleaner.Mode.OFF && sessionText.isNotEmpty()) {
+        if (cleanup && sessionText.isNotEmpty()) {
             val raw = sessionText.toString()
-            val mode = cleanup
+            val into = target
             showBubble("Upravuji text…")
             cleaning = true
             scope.launch {
-                val cleaned = LlmCleaner.clean(this@FloatingDictationService, raw, mode)
+                val cleaned = LlmCleaner.clean(this@FloatingDictationService, raw, into)
                 sessionText.setLength(0)
                 sessionText.append(cleaned)
                 if (TextInsertionService.insert(cleaned) != true) insertFailed = true
@@ -302,7 +305,7 @@ class FloatingDictationService : Service() {
             if (sessionText.isNotEmpty()) sessionText.append(' ')
             sessionText.append(text)
             // With cleanup the whole dictation is inserted at the end instead.
-            if (cleanup == LlmCleaner.Mode.OFF && !insertFailed && TextInsertionService.insert(text) != true) insertFailed = true
+            if (!cleanup && !insertFailed && TextInsertionService.insert(text) != true) insertFailed = true
             showBubble(sessionText.takeLast(160).toString())
         }
 
