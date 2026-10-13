@@ -23,6 +23,7 @@ Changes against upstream:
   Apache 2.0, 2.6 GB downloaded in the app). A single switch: the model fixes recognition errors,
   punctuation and self-corrections and picks the form itself (list, e-mail, chat message) from the
   content and the app the text goes into.
+- Experimental: Gemma on the NPU (the SM8750 build, 3.0 GB) instead of the GPU.
 - Model downloads run in a foreground service, so they continue in the background.
 
 Measured on a Galaxy Z Fold 7: model load 3.4 s once, then 7.2 s of Czech speech in 0.87 s and

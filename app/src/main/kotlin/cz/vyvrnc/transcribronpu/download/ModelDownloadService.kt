@@ -36,16 +36,19 @@ import kotlinx.coroutines.launch
 class ModelDownloadService : Service() {
     enum class Model(val title: String, val notificationId: Int) {
         WHISPER("NPU model (Whisper)", 41),
-        GEMMA("Model pro úpravu textu (Gemma)", 42);
+        GEMMA("Model pro úpravu textu (Gemma, GPU)", 42),
+        GEMMA_NPU("Model pro úpravu textu (Gemma, NPU)", 43);
 
         fun ready(context: Context) = when (this) {
             WHISPER -> NpuModel.ready(context)
-            GEMMA -> LlmModel.ready(context)
+            GEMMA -> LlmModel.GPU.ready(context)
+            GEMMA_NPU -> LlmModel.NPU.ready(context)
         }
 
         suspend fun download(context: Context, onProgress: (String, Long, Long) -> Unit) = when (this) {
             WHISPER -> NpuModel.download(context, onProgress)
-            GEMMA -> LlmModel.download(context, onProgress)
+            GEMMA -> LlmModel.GPU.download(context, onProgress)
+            GEMMA_NPU -> LlmModel.NPU.download(context, onProgress)
         }
     }
 

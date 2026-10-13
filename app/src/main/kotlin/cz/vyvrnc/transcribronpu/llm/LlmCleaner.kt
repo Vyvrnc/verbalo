@@ -9,24 +9,19 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * On-device cleanup of dictated text with Gemma (LiteRT-LM, GPU with CPU fallback). The
- * engine takes several seconds to load, so it stays loaded for [IDLE_RELEASE_MS] after use
- * and [preload] starts loading while the user still speaks.
+ * On-device cleanup of dictated text with Gemma (LiteRT-LM). The generic build runs on the GPU
+ * (CPU as fallback), the SM8750 build on the NPU. The engine is loaded for each cleanup and
+ * closed right after it: Gemma and Whisper together do not fit in the memory Android leaves to
+ * a foreground service, and the process was killed (low memory) while both were loaded.
  */
 object LlmCleaner {
     private const val TAG = "LlmCleaner"
-    private const val IDLE_RELEASE_MS = 5 * 60 * 1000L
 
     /**
      * Where the text goes, read from the focused field when the dictation starts. Helps the
@@ -34,50 +29,42 @@ object LlmCleaner {
      */
     data class Target(val packageName: String, val appLabel: String?, val fieldHint: String?, val textBefore: String?)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
-    private var engine: Engine? = null
-    private var idleJob: Job? = null
-
-    fun preload(context: Context) {
-        val app = context.applicationContext
-        if (!LlmModel.ready(app)) return
-        scope.launch {
-            runCatching { mutex.withLock { ensureEngine(app) } }.onFailure { Log.w(TAG, "preload failed", it) }
-            scheduleIdleRelease()
-        }
-    }
 
     /**
      * Cleaned text, or the original when the model is missing, fails or returns something
-     * implausible (empty, or far longer than the input, i.e. it started to answer).
+     * implausible (empty, or far longer than the input, i.e. it started to answer). The caller
+     * frees the Whisper model first.
      */
-    suspend fun clean(context: Context, text: String, target: Target?): String = withContext(Dispatchers.IO) {
+    suspend fun clean(context: Context, text: String, target: Target?, model: LlmModel): String = withContext(Dispatchers.IO) {
         val app = context.applicationContext
-        if (text.isBlank() || !LlmModel.ready(app)) return@withContext text
+        if (text.isBlank() || !model.ready(app)) return@withContext text
         try {
             mutex.withLock {
-                val e = ensureEngine(app)
                 val t0 = System.nanoTime()
-                val config = ConversationConfig(
-                    systemInstruction = Contents.of(SYSTEM),
-                    // Greedy: an editor, not a writer.
-                    samplerConfig = SamplerConfig(1, 1.0, 0.0, 0),
-                )
-                val reply = e.createConversation(config).use { conversation ->
-                    conversation.sendMessage(message(text, target))
+                openEngine(app, model).use { e ->
+                    val t1 = System.nanoTime()
+                    val config = ConversationConfig(
+                        systemInstruction = Contents.of(SYSTEM),
+                        // Greedy: an editor, not a writer.
+                        samplerConfig = SamplerConfig(1, 1.0, 0.0, 0),
+                    )
+                    val reply = e.createConversation(config).use { conversation ->
+                        conversation.sendMessage(message(text, target))
+                    }
+                    val out = reply.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+                        .trim().removePrefix("<dictation>").removeSuffix("</dictation>").trim()
+                    Log.i(TAG, "%s %s: %d -> %d chars, load %d ms, generate %d ms".format(
+                        model, target?.packageName, text.length, out.length,
+                        (t1 - t0) / 1_000_000, (System.nanoTime() - t1) / 1_000_000))
+                    if (out.isEmpty() || out.length > text.length * 3 + 200) text else out
                 }
-                val out = reply.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
-                    .trim().removePrefix("<dictation>").removeSuffix("</dictation>").trim()
-                Log.i(TAG, "%s: %d -> %d chars in %d ms".format(target?.packageName, text.length, out.length, (System.nanoTime() - t0) / 1_000_000))
-                if (out.isEmpty() || out.length > text.length * 3 + 200) text else out
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Also linkage errors from the NPU libraries: fall back to the raw text.
             if (e is kotlinx.coroutines.CancellationException) throw e
-            Log.e(TAG, "cleanup failed", e)
+            Log.e(TAG, "cleanup failed ($model)", e)
             text
-        } finally {
-            scheduleIdleRelease()
         }
     }
 
@@ -143,31 +130,20 @@ object LlmCleaner {
     )
 
     /** Call with [mutex] held. */
-    private fun ensureEngine(context: Context): Engine {
-        engine?.let { return it }
-        val path = LlmModel.file(context).absolutePath
-        val t0 = System.nanoTime()
-        val e = try {
-            Engine(EngineConfig(path, Backend.GPU(), cacheDir = context.cacheDir.absolutePath)).also { it.initialize() }
+    private fun openEngine(context: Context, model: LlmModel): Engine {
+        val path = model.file(context).absolutePath
+        val cache = context.cacheDir.absolutePath
+        if (model == LlmModel.NPU) {
+            // The dispatch library (litert-npu-runtime-qualcomm) and the QNN libraries shipped
+            // for Whisper sit in the app's native library directory.
+            return Engine(EngineConfig(path, Backend.NPU(context.applicationInfo.nativeLibraryDir), cacheDir = cache))
+                .also { it.initialize() }
+        }
+        return try {
+            Engine(EngineConfig(path, Backend.GPU(), cacheDir = cache)).also { it.initialize() }
         } catch (gpu: Exception) {
             Log.w(TAG, "GPU backend failed, using CPU", gpu)
-            Engine(EngineConfig(path, Backend.CPU(), cacheDir = context.cacheDir.absolutePath)).also { it.initialize() }
-        }
-        Log.i(TAG, "engine loaded in ${(System.nanoTime() - t0) / 1_000_000} ms")
-        engine = e
-        return e
-    }
-
-    @Synchronized
-    private fun scheduleIdleRelease() {
-        idleJob?.cancel()
-        idleJob = scope.launch {
-            delay(IDLE_RELEASE_MS)
-            mutex.withLock {
-                engine?.close()
-                engine = null
-                Log.i(TAG, "released after idle")
-            }
+            Engine(EngineConfig(path, Backend.CPU(), cacheDir = cache)).also { it.initialize() }
         }
     }
 }

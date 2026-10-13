@@ -97,6 +97,23 @@ object NpuEngine {
         return handle
     }
 
+    /**
+     * Frees the model and runs [block] (the Gemma cleanup) while holding the model lock, so no
+     * recognition session (keyboard, preload) can load Whisper again until [block] is done: the
+     * two models together do not fit in memory. The next use reloads Whisper.
+     */
+    suspend fun <T> whileReleased(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            idleJob?.cancel()
+            if (handle != 0L) {
+                NpuNative.close(handle)
+                handle = 0L
+                Log.i(TAG, "released for another model")
+            }
+            block()
+        }
+    }
+
     @Synchronized
     private fun scheduleIdleRelease() {
         idleJob?.cancel()

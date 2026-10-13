@@ -61,8 +61,8 @@ android {
         // The NPU path (QNN HTP v79) exists only on SM8750-class phones running Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.2.1"
+        versionCode = 5
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -181,4 +181,6 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // Gemma text cleanup (Apache 2.0). Its classes carry Kotlin 2.4 metadata, hence Kotlin 2.3.
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
+    // Dispatch library for Gemma on the Qualcomm NPU (Apache 2.0); uses the QNN libraries above.
+    implementation("com.google.ai.edge.litert:litert-npu-runtime-qualcomm:2.3.0")
 }

@@ -15,6 +15,10 @@
   an on/off switch, the format is inferred from the content and the target app (package, field hint,
   text before the cursor), like Wispr Flow's context-aware formatting.
 
+- 0.4.0 (0.3.x is skipped: upstream already uses those tags): fixes a low-memory kill of the floating
+  button (Whisper and Gemma were loaded together); Whisper is freed for the cleanup and Gemma is closed
+  right after it. Experimental Gemma on the NPU (SM8750 build, LiteRT NPU runtime for Qualcomm).
+
 ## Next
 - Field test on the Fold: first and later dictations, live preview latency, battery and temperature,
   Samsung Keyboard, Gboard, HeliBoard, the floating button in common apps (messengers, browser, mail).

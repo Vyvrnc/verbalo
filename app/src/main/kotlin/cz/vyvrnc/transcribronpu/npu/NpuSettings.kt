@@ -2,6 +2,7 @@ package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
 import android.content.SharedPreferences
+import cz.vyvrnc.transcribronpu.llm.LlmModel
 
 /**
  * Recognition settings read by the recognition service at the start of every session.
@@ -16,6 +17,7 @@ object NpuSettings {
     private const val KEY_LIVE = "live_partials"
     private const val KEY_CLEANUP_MODE = "cleanup_mode"
     private const val KEY_CLEANUP = "cleanup"
+    private const val KEY_CLEANUP_NPU = "cleanup_npu"
 
     /** Language from the calling app (RecognizerIntent.EXTRA_LANGUAGE), Czech without one. */
     const val LANGUAGE_FROM_CALLER = "caller"
@@ -61,6 +63,12 @@ object NpuSettings {
         return p.getString(KEY_CLEANUP_MODE, null).let { it != null && it != "OFF" }
     }
     fun setCleanup(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_CLEANUP, value).apply()
+
+    /** Cleanup model build: the SM8750 NPU one (experimental) or the generic GPU one. */
+    fun cleanupModel(context: Context): LlmModel =
+        if (prefs(context).getBoolean(KEY_CLEANUP_NPU, false)) LlmModel.NPU else LlmModel.GPU
+    fun setCleanupModel(context: Context, value: LlmModel) =
+        prefs(context).edit().putBoolean(KEY_CLEANUP_NPU, value == LlmModel.NPU).apply()
 
     /**
      * Whisper language code for a session: the setting, or for [LANGUAGE_FROM_CALLER] the
