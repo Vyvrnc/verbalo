@@ -30,6 +30,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import cz.vyvrnc.transcribronpu.history.AppLog
+import cz.vyvrnc.transcribronpu.history.DictationHistory
 import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 import cz.vyvrnc.transcribronpu.llm.LlmModel
 import cz.vyvrnc.transcribronpu.npu.NpuEngine
@@ -57,6 +59,7 @@ import kotlin.math.abs
 class FloatingDictationService : Service() {
     companion object {
         private const val CHANNEL = "floating_dictation"
+        private const val TAG = "Plovoucí tlačítko"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "cz.vyvrnc.transcribronpu.floating.STOP"
         private const val PREFS = "floating_button"
@@ -89,6 +92,8 @@ class FloatingDictationService : Service() {
 
     /** Final text of this dictation so far, and whether some of it could not be inserted. */
     private val sessionText = StringBuilder()
+    /** The dictation's entry in DictationHistory, from the recognition result. */
+    private var historyId: String? = null
     private var insertFailed = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -241,13 +246,19 @@ class FloatingDictationService : Service() {
         sessionText.clear()
         insertFailed = false
         bubbleDismissed = false
+        historyId = null
         // Not preloaded while speaking: Whisper and Gemma do not fit in memory together.
         cleanup = NpuSettings.cleanupModel(this).takeIf { NpuSettings.cleanup(this) && it.ready(this) }
         target = if (cleanup != null) TextInsertionService.target() else null
         dictating = true
         button?.let { paintButton(it, true) }
-        showBubble("Poslouchám…")
+        showBubble(if (TextInsertionService.target() == null && !TextInsertionService.enabled(this)) {
+            "Poslouchám… (vkládání do pole je vypnuté, text půjde do schránky)"
+        } else {
+            "Poslouchám…"
+        })
         r.startListening(Intent().apply {
+            putExtra(MainRecognitionService.EXTRA_SOURCE, "plovoucí tlačítko")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(MainRecognitionService.EXTRA_LIVE_PARTIALS, true)
             // Ends with the next tap, so pauses while thinking do not cut the dictation.
@@ -266,18 +277,39 @@ class FloatingDictationService : Service() {
             cleaning = true
             scope.launch {
                 // The recognition session is over; Whisper reloads with the next dictation.
-                val cleaned = NpuEngine.whileReleased {
+                val result = NpuEngine.whileReleased(this@FloatingDictationService) {
                     LlmCleaner.clean(this@FloatingDictationService, raw, into, model)
+                }
+                val cleaned = result.text
+                historyId?.let { id ->
+                    if (result.edited) {
+                        // The history is a by-product: a failure (full storage) must not stop the insertion.
+                        runCatching {
+                            DictationHistory.saveCleanup(this@FloatingDictationService, id, cleaned, model.name,
+                                into?.appLabel ?: into?.packageName, result.loadMs, result.generateMs)
+                        }.onFailure { AppLog.e(this@FloatingDictationService, TAG, "uložení do historie selhalo", it) }
+                    }
                 }
                 sessionText.setLength(0)
                 sessionText.append(cleaned)
-                if (TextInsertionService.insert(cleaned) != true) insertFailed = true
+                if (insert(cleaned) != true) insertFailed = true
                 cleaning = false
-                deliverEnd(message)
+                deliverEnd(message ?: result.error?.let { "Úprava textu se nepovedla, vložen původní text" })
             }
             return
         }
         deliverEnd(message)
+    }
+
+    /** Inserts into the focused field and logs why it did not work. */
+    private fun insert(text: String): Boolean? {
+        val result = TextInsertionService.insert(text)
+        when (result) {
+            true -> {}
+            false -> AppLog.i(this, TAG, "vložení: žádné upravitelné pole v popředí, text jde do schránky")
+            null -> AppLog.i(this, TAG, "vložení: služba přístupnosti „vkládání diktátu“ je vypnutá, text jde do schránky")
+        }
+        return result
     }
 
     private fun deliverEnd(message: String?) {
@@ -300,21 +332,26 @@ class FloatingDictationService : Service() {
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onPartialResults(partialResults: Bundle?) {
-            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
+            // Spaces only: a segment may be or contain a spoken line break ("nový řádek").
+            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                ?.trim(' ', '\t')
             if (text.isNullOrEmpty()) return
             if (partialResults.getBoolean(MainRecognitionService.LIVE_PARTIAL)) {
-                showBubble(text)
+                if (text.isNotBlank()) showBubble(text.trim())
                 return
             }
             // A finished segment goes into the field right away.
-            if (sessionText.isNotEmpty()) sessionText.append(' ')
+            if (sessionText.isNotEmpty() && !sessionText.endsWith('\n') && !text.startsWith('\n')) sessionText.append(' ')
             sessionText.append(text)
             // With cleanup the whole dictation is inserted at the end instead.
-            if (cleanup == null && !insertFailed && TextInsertionService.insert(text) != true) insertFailed = true
+            if (cleanup == null && !insertFailed && insert(text) != true) insertFailed = true
             showBubble(sessionText.takeLast(160).toString())
         }
 
-        override fun onResults(results: Bundle?) = finishDictation(null)
+        override fun onResults(results: Bundle?) {
+            historyId = results?.getString(MainRecognitionService.HISTORY_ID)
+            finishDictation(null)
+        }
 
         override fun onError(error: Int) = finishDictation(
             when (error) {

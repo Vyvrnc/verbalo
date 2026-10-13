@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolunteerActivism
@@ -61,6 +62,7 @@ import dev.soupslurpr.transcribro.ui.settings.LicenseScreen
 import dev.soupslurpr.transcribro.ui.settings.PrivacyPolicyScreen
 import dev.soupslurpr.transcribro.ui.settings.SettingsStartScreen
 import dev.soupslurpr.transcribro.ui.start.StartScreen
+import dev.soupslurpr.transcribro.ui.history.HistoryScreen
 import kotlinx.coroutines.launch
 
 enum class TranscribroAppScreens(@StringRes val title: Int) {
@@ -68,6 +70,8 @@ enum class TranscribroAppScreens(@StringRes val title: Int) {
 
     Start(title = R.string.start),
     StartStart(title = R.string.start),
+    History(title = R.string.history),
+    HistoryStart(title = R.string.history),
     Settings(title = R.string.settings),
     SettingsStart(title = R.string.settings),
     SettingsLicense(title = R.string.license),
@@ -79,6 +83,7 @@ enum class TranscribroAppScreens(@StringRes val title: Int) {
 
 val navBarScreens = listOf(
     TranscribroAppScreens.Start,
+    TranscribroAppScreens.History,
     TranscribroAppScreens.Settings,
     TranscribroAppScreens.Donate,
 )
@@ -171,6 +176,11 @@ fun TranscribroApp(
                                         contentDescription = null
                                     )
 
+                                    TranscribroAppScreens.History -> Icon(
+                                        imageVector = Icons.Filled.History,
+                                        contentDescription = null
+                                    )
+
                                     TranscribroAppScreens.Settings -> Icon(
                                         imageVector = if (navBarSelected == navBarScreen) {
                                             Icons.Filled.Settings
@@ -249,6 +259,16 @@ fun TranscribroApp(
                     route = TranscribroAppScreens.StartStart
                 ) {
                     StartScreen()
+                }
+            }
+            navigationWithDefaultSlideTransitions(
+                route = TranscribroAppScreens.History,
+                startDestination = TranscribroAppScreens.HistoryStart.name,
+            ) {
+                composableWithDefaultSlideTransitions(
+                    route = TranscribroAppScreens.HistoryStart
+                ) {
+                    HistoryScreen()
                 }
             }
             navigationWithDefaultSlideTransitions(

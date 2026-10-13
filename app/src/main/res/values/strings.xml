@@ -26,6 +26,7 @@
     <string name="continue_to_app" translatable="false">Continue</string>
     <string name="donate">Donate</string>
     <string name="start">Start</string>
+    <string name="history">Historie</string>
     <string name="auto_switch_to_previous_input_method_setting_name">Auto-Switch To Previous Input Method</string>
     <string name="voice_input_keyboard_setting_category">Voice Input Keyboard</string>
     <string name="auto_switch_to_previous_input_method_setting_description">Automatically switch to the previous

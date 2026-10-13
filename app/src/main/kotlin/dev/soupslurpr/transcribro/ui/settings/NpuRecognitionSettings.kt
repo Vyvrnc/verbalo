@@ -1,5 +1,8 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cz.vyvrnc.transcribronpu.npu.Customization
 import cz.vyvrnc.transcribronpu.npu.NpuSettings
 
 /** Language, vocabulary, replacements and live preview of the NPU recognition. */
@@ -34,6 +38,24 @@ fun NpuRecognitionSettings() {
     var replacements by remember { mutableStateOf(NpuSettings.replacements(context)) }
     var live by remember { mutableStateOf(NpuSettings.livePartials(context)) }
     var dialog by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Customization.export(context).toByteArray()) }
+        }.isSuccess
+        Toast.makeText(context, if (ok) "Uloženo" else "Uložení se nepovedlo", Toast.LENGTH_SHORT).show()
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val message = runCatching {
+            val json = context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+            Customization.import(context, json)
+        }.getOrElse { it.message ?: "Import se nepovedl" }
+        vocabulary = NpuSettings.vocabulary(context)
+        replacements = NpuSettings.replacements(context)
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+    }
 
     Column(Modifier.fillMaxWidth()) {
         SettingsItem(
@@ -52,6 +74,14 @@ fun NpuRecognitionSettings() {
                 if (it == 0) "Opraví slova, která model slyší jinak: „dejíčko => DI“." else "Pravidel: $it"
             },
         ) { dialog = "replacements" }
+        SettingsItem(
+            name = "Exportovat slovník a náhrady",
+            description = "Uloží slovník, náhrady a vlastní pokyny pro úpravu textu do souboru JSON.",
+        ) { exportLauncher.launch("transcribro-prizpusobeni.json") }
+        SettingsItem(
+            name = "Importovat slovník a náhrady",
+            description = "Doplní výrazy a náhrady ze souboru (stávající zůstanou), vlastní pokyny nahradí.",
+        ) { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         SettingsSwitchItem(
             name = "Živý přepis",
             description = "Během mluvení ukazuje rozpracovaný text (klávesnice Transcribro a plovoucí tlačítko). " +

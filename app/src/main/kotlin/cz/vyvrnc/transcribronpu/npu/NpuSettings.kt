@@ -18,6 +18,8 @@ object NpuSettings {
     private const val KEY_CLEANUP_MODE = "cleanup_mode"
     private const val KEY_CLEANUP = "cleanup"
     private const val KEY_CLEANUP_NPU = "cleanup_npu"
+    private const val KEY_HISTORY = "save_history"
+    private const val KEY_CLEANUP_PROMPT = "cleanup_prompt"
 
     /** Language from the calling app (RecognizerIntent.EXTRA_LANGUAGE), Czech without one. */
     const val LANGUAGE_FROM_CALLER = "caller"
@@ -63,6 +65,16 @@ object NpuSettings {
         return p.getString(KEY_CLEANUP_MODE, null).let { it != null && it != "OFF" }
     }
     fun setCleanup(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_CLEANUP, value).apply()
+
+    /** The user's own instructions for the cleanup model; null means the built-in prompt. */
+    fun cleanupPrompt(context: Context): String? =
+        prefs(context).getString(KEY_CLEANUP_PROMPT, null)?.takeIf { it.isNotBlank() }
+    fun setCleanupPrompt(context: Context, value: String?) =
+        prefs(context).edit().putString(KEY_CLEANUP_PROMPT, value?.takeIf { it.isNotBlank() }).apply()
+
+    /** Keep recordings and transcripts of dictations in the app (History screen). */
+    fun saveHistory(context: Context): Boolean = prefs(context).getBoolean(KEY_HISTORY, true)
+    fun setSaveHistory(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_HISTORY, value).apply()
 
     /** Cleanup model build: the SM8750 NPU one (experimental) or the generic GPU one. */
     fun cleanupModel(context: Context): LlmModel =

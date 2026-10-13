@@ -2,6 +2,7 @@ package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
 import android.util.Log
+import cz.vyvrnc.transcribronpu.history.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -49,7 +50,16 @@ object NpuEngine {
         withContext(Dispatchers.IO) {
             val app = context.applicationContext
             try {
-                mutex.withLock { run(app, pcm, language, prompt) }
+                mutex.withLock {
+                    val t0 = System.nanoTime()
+                    run(app, pcm, language, prompt).also {
+                        AppLog.i(app, "Whisper", "%.1f s zvuku přepsáno za %d ms".format(
+                            pcm.size / 16000f, (System.nanoTime() - t0) / 1_000_000))
+                    }
+                }
+            } catch (e: Exception) {
+                AppLog.e(app, "Whisper", "přepis selhal", e)
+                throw e
             } finally {
                 scheduleIdleRelease()   // also after a failure, so the model is still released when idle
             }
@@ -88,11 +98,17 @@ object NpuEngine {
         if (!NpuModel.ready(context)) throw IllegalStateException("NPU model není stažený (Nastavení → NPU model)")
         configureDspEnvironment(context)
         val t0 = System.nanoTime()
-        handle = NpuNative.open(
-            context.applicationInfo.nativeLibraryDir,
-            NpuModel.encoder(context).absolutePath,
-            NpuModel.decoder(context).absolutePath,
-        )
+        handle = try {
+            NpuNative.open(
+                context.applicationInfo.nativeLibraryDir,
+                NpuModel.encoder(context).absolutePath,
+                NpuModel.decoder(context).absolutePath,
+            )
+        } catch (e: Exception) {
+            AppLog.e(context, "Whisper", "načtení modelu na NPU selhalo", e)
+            throw e
+        }
+        AppLog.i(context, "Whisper", "model načten na NPU za ${(System.nanoTime() - t0) / 1_000_000} ms")
         Log.i(TAG, "loaded in ${(System.nanoTime() - t0) / 1_000_000} ms\n${NpuNative.info(handle)}")
         return handle
     }
@@ -102,13 +118,14 @@ object NpuEngine {
      * recognition session (keyboard, preload) can load Whisper again until [block] is done: the
      * two models together do not fit in memory. The next use reloads Whisper.
      */
-    suspend fun <T> whileReleased(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+    suspend fun <T> whileReleased(context: Context, block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             idleJob?.cancel()
             if (handle != 0L) {
                 NpuNative.close(handle)
                 handle = 0L
                 Log.i(TAG, "released for another model")
+                AppLog.i(context, "Whisper", "uvolněn kvůli úpravě textu")
             }
             block()
         }

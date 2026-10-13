@@ -18,6 +18,10 @@
 - 0.4.0 (0.3.x is skipped: upstream already uses those tags): fixes a low-memory kill of the floating
   button (Whisper and Gemma were loaded together); Whisper is freed for the cleanup and Gemma is closed
   right after it. Experimental Gemma on the NPU (SM8750 build, LiteRT NPU runtime for Qualcomm).
+- 0.5.0: dictation history (recording, Whisper text and cleaned text, playback, zip export for
+  model tuning) and an in-app event log; deterministic spoken commands in Czech/Slovak ("lomeno" ->
+  "/", "nový řádek", "dvojtečka", brackets); few-shot examples in the cleanup prompt, which can now be
+  edited in the app; export/import of vocabulary, replacements and the prompt as JSON.
 
 ## Next
 - Field test on the Fold: first and later dictations, live preview latency, battery and temperature,

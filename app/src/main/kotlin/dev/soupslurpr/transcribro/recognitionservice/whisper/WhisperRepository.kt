@@ -4,6 +4,7 @@ import android.content.Context
 import cz.vyvrnc.transcribronpu.npu.NpuEngine
 import cz.vyvrnc.transcribronpu.npu.NpuSettings
 import cz.vyvrnc.transcribronpu.npu.Replacements
+import cz.vyvrnc.transcribronpu.npu.SpokenCommands
 import cz.vyvrnc.transcribronpu.npu.SilenceSplitter
 import cz.vyvrnc.transcribronpu.npu.WhisperTokenizer
 
@@ -30,7 +31,7 @@ class WhisperRepository(private val context: Context) {
         val pieces = SilenceSplitter.split(pcm).map { range ->
             NpuEngine.transcribe(context, pcm.copyOfRange(range.first, range.last + 1), language, prompt).trim()
         }
-        return replacements.apply(pieces.filter { it.isNotEmpty() }.joinToString(" "))
+        return SpokenCommands.apply(replacements.apply(pieces.filter { it.isNotEmpty() }.joinToString(" ")), language)
     }
 
     /**
@@ -41,7 +42,7 @@ class WhisperRepository(private val context: Context) {
     suspend fun transcribePartial(data: ShortArray, language: String): String? {
         if (data.size > SilenceSplitter.MAX_SAMPLES) return null
         val text = NpuEngine.tryTranscribe(context, toFloat(data), language, prompt) ?: return null
-        return replacements.apply(text.trim())
+        return SpokenCommands.apply(replacements.apply(text.trim()), language)
     }
 
     fun preload() = NpuEngine.preload(context)

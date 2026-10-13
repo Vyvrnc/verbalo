@@ -31,6 +31,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.lang.System.currentTimeMillis
 import java.util.concurrent.atomic.AtomicBoolean
+import cz.vyvrnc.transcribronpu.history.AppLog
+import cz.vyvrnc.transcribronpu.history.DictationHistory
 
 private data class Transcription(
     val audioData: MutableList<Short> = mutableListOf(),
@@ -52,6 +54,12 @@ class MainRecognitionService : RecognitionService() {
         const val EXTRA_LIVE_PARTIALS = "cz.vyvrnc.transcribronpu.EXTRA_LIVE_PARTIALS"
         const val LIVE_PARTIAL = "cz.vyvrnc.transcribronpu.LIVE_PARTIAL"
 
+        /** Request extra: who dictates, for the history ("floating", "keyboard"); else the caller's package. */
+        const val EXTRA_SOURCE = "cz.vyvrnc.transcribronpu.EXTRA_SOURCE"
+        /** Result extra: id of the saved dictation in DictationHistory (when history is on). */
+        const val HISTORY_ID = "cz.vyvrnc.transcribronpu.HISTORY_ID"
+
+        private const val TAG = "Rozpoznávání"
         private const val LIVE_INTERVAL_MS = 900L
         private const val LIVE_MIN_SAMPLES = 16000 * 3 / 4
     }
@@ -268,8 +276,16 @@ class MainRecognitionService : RecognitionService() {
 
 
         var totalTranscriptionTime = 0L
+        val source = recognizerIntent?.getStringExtra(EXTRA_SOURCE)
+            ?: listener?.let { runCatching { packageManager.getNameForUid(it.callingUid) }.getOrNull() }
+            ?: "?"
+        val recorder = if (NpuSettings.saveHistory(this)) {
+            runCatching { DictationHistory.Recorder(this, DictationHistory.newId()) }
+                .onFailure { AppLog.e(this, TAG, "nelze založit nahrávku", it) }.getOrNull()
+        } else null
 
         recordAndTranscribeJob = recordAndTranscribeScope.launch recordAndTranscribe@{
+          try {
             audioRecord.startRecording()
             isRecording.set(true)
             isSpeaking = false
@@ -287,6 +303,7 @@ class MainRecognitionService : RecognitionService() {
                 val buffer = ShortArray(bufferSize)
 
                 val numberOfShorts = audioRecord.read(buffer, 0, bufferSize)
+                recorder?.write(buffer, numberOfShorts)
 
                 for (i in 0 until numberOfShorts) {
                     if (transcriptions[transcriptionIndex] == null) {
@@ -531,8 +548,19 @@ class MainRecognitionService : RecognitionService() {
             }
 
             val transcription = transcriptions.toSortedMap().values
-                .mapNotNull { it.text?.trim()?.takeIf(String::isNotEmpty) }
+                .mapNotNull { it.text?.trim(' ', '\t')?.takeIf(String::isNotEmpty) }
                 .joinToString(" ")
+                .replace(" \n", "\n").replace("\n ", "\n")
+
+            val historyId = recorder?.takeIf { it.finish() }?.let { rec ->
+                runCatching {
+                    DictationHistory.saveTranscript(this@MainRecognitionService, rec.id, source, language, rec.durationSec, transcription)
+                    rec.id
+                }.getOrNull()
+            }
+            AppLog.i(this@MainRecognitionService, TAG, "diktát (%s, %s): %.1f s zvuku, %d znaků%s".format(
+                source, language, recorder?.durationSec ?: 0.0, transcription.length,
+                if (segmentFailed.get()) ", NPU selhala" else ""))
 
             if (segmentFailed.get() && transcription.isEmpty()) {
                 // Nothing usable came back because the NPU failed: say so instead of
@@ -552,6 +580,7 @@ class MainRecognitionService : RecognitionService() {
                         transcription
                     )
                 )
+                if (historyId != null) putString(HISTORY_ID, historyId)
             }
 
 
@@ -560,6 +589,10 @@ class MainRecognitionService : RecognitionService() {
             } catch (e: RemoteException) {
                 throw RuntimeException(e)
             }
+          } finally {
+            // Cancelled sessions keep no recording; a finished one is already saved.
+            recorder?.discard()
+          }
         }
     }
 
@@ -568,7 +601,8 @@ class MainRecognitionService : RecognitionService() {
      * so the separating space is put back here (the keyboard drops it where not needed),
      * otherwise consecutive segments were glued together ("Snad.Wow").
      */
-    private fun segmentPartial(text: String): String = text.trim().let { if (it.isEmpty()) "" else " $it" }
+    private fun segmentPartial(text: String): String =
+        text.trim(' ', '\t').let { if (it.isEmpty() || it.startsWith('\n')) it else " $it" }
 
     override fun onCancel(listener: Callback?) {
         liveJob?.cancel()

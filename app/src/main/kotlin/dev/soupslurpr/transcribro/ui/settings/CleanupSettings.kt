@@ -1,6 +1,18 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,6 +38,8 @@ fun CleanupSettings() {
     val download = if (model == LlmModel.NPU) ModelDownloadService.Model.GEMMA_NPU else ModelDownloadService.Model.GEMMA
     val ready = remember(states[download], model) { model.ready(context) }
     var enabled by remember { mutableStateOf(NpuSettings.cleanup(context)) }
+    var customPrompt by remember { mutableStateOf(NpuSettings.cleanupPrompt(context)) }
+    var promptDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth()) {
         if (model == LlmModel.NPU) {
@@ -60,6 +74,20 @@ fun CleanupSettings() {
                 NpuSettings.setCleanup(context, it)
             },
         )
+        ListItem(
+            modifier = Modifier.clickable {
+                // Re-read: an import may have replaced the prompt since this screen opened.
+                customPrompt = NpuSettings.cleanupPrompt(context)
+                promptDialog = true
+            },
+            headlineContent = { Text("Pokyny pro úpravu textu", fontWeight = FontWeight.SemiBold) },
+            supportingContent = {
+                Text(
+                    if (customPrompt == null) "Výchozí. Klepnutím je upravíte (styl, oslovení, co měnit a co ne)."
+                    else "Vlastní (${customPrompt!!.length} znaků). Klepnutím upravíte nebo vrátíte výchozí."
+                )
+            },
+        )
         SettingsSwitchItem(
             name = "Gemma na NPU (zkušební)",
             description = "Varianta pro Snapdragon 8 Elite (3,0 GB, stahuje se zvlášť). Měla by být rychlejší " +
@@ -71,4 +99,55 @@ fun CleanupSettings() {
             },
         )
     }
+
+    if (promptDialog) {
+        PromptDialog(
+            initial = customPrompt ?: LlmCleaner.DEFAULT_PROMPT,
+            onDismiss = { promptDialog = false },
+            onSave = { text ->
+                // Saving the unchanged default keeps following future default updates.
+                val value = text.takeIf { it.isNotBlank() && it.trim() != LlmCleaner.DEFAULT_PROMPT.trim() }
+                NpuSettings.setCleanupPrompt(context, value)
+                customPrompt = value
+                promptDialog = false
+            },
+            onReset = {
+                NpuSettings.setCleanupPrompt(context, null)
+                customPrompt = null
+                promptDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun PromptDialog(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit, onReset: () -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pokyny pro úpravu textu") },
+        text = {
+            Column {
+                Text(
+                    "Systémový prompt pro Gemmu. Diktát dostane mezi značkami <dictation>, cílovou aplikaci " +
+                        "a text před kurzorem nad nimi. Příklady v pokynech pomáhají malému modelu nejvíc.",
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .heightIn(min = 200.dp, max = 420.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Uložit") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReset) { Text("Výchozí") }
+                TextButton(onClick = onDismiss) { Text("Zrušit") }
+            }
+        },
+    )
 }

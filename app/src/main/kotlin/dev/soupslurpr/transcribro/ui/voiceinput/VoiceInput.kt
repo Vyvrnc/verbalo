@@ -995,6 +995,7 @@ class VoiceInput : InputMethodService() {
         return Intent().apply {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(MainRecognitionService.EXTRA_LIVE_PARTIALS, true)
+            putExtra(MainRecognitionService.EXTRA_SOURCE, "klávesnice")
             putExtra(MainRecognitionService.EXTRA_AUTO_STOP, longForm)
         }
     }

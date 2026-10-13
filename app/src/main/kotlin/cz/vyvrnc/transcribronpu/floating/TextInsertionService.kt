@@ -63,7 +63,7 @@ class TextInsertionService : AccessibilityService() {
 
     private fun insertText(text: String): Boolean {
         val node = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable } ?: return false
-        val piece = text.trim()
+        val piece = text.trim(' ', '\t')
         if (piece.isEmpty()) return true
         val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
         var start = node.textSelectionStart
