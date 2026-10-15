@@ -36,6 +36,7 @@ import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 import cz.vyvrnc.transcribronpu.llm.LlmModel
 import cz.vyvrnc.transcribronpu.npu.NpuEngine
 import cz.vyvrnc.transcribronpu.npu.NpuSettings
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +49,9 @@ import dev.soupslurpr.transcribro.R
 import dev.soupslurpr.transcribro.dataStore
 import dev.soupslurpr.transcribro.preferences.PreferencesUiState
 import androidx.datastore.preferences.core.Preferences
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import dev.soupslurpr.transcribro.recognitionservice.MainRecognitionService
 import kotlin.math.abs
 
@@ -110,7 +114,16 @@ class FloatingDictationService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
-        scope.launch { dataStore.data.collect { settings = it } }
+        scope.launch {
+            // A read error leaves the defaults; it must not take the floating button down.
+            try {
+                dataStore.data.collect { settings = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.e(this@FloatingDictationService, TAG, "čtení nastavení selhalo", e)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -267,7 +280,11 @@ class FloatingDictationService : Service() {
             "úprava ${if (cleanup != null) "ano" else "ne"}")
         // The keyboard's switches in the settings apply to the floating button too.
         val prefs = PreferencesUiState()
-        val stored = settings
+        // Only a tap right after the service started can come before the first read; wait
+        // briefly for it instead of silently ignoring the user's switches.
+        val stored = settings ?: runCatching {
+            runBlocking { withTimeoutOrNull(500) { dataStore.data.first() } }
+        }.getOrNull()
         val autoStop = stored?.get(prefs.autoStopRecognition.first) ?: prefs.autoStopRecognition.second.value
         autoSend = stored?.get(prefs.autoSendTranscription.first) ?: prefs.autoSendTranscription.second.value
         TextInsertionService.newDictation()
@@ -382,7 +399,8 @@ class FloatingDictationService : Service() {
 
         override fun onResults(results: Bundle?) {
             historyId = results?.getString(MainRecognitionService.HISTORY_ID)
-            finishDictation(null, ok = true)
+            // A failed segment means the text may be incomplete: insert it, never auto-send it.
+            finishDictation(null, ok = results?.getBoolean(MainRecognitionService.SEGMENT_FAILED) != true)
         }
 
         override fun onError(error: Int) = finishDictation(

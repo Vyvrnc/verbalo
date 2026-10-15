@@ -59,6 +59,9 @@ class MainRecognitionService : RecognitionService() {
         /** Result extra: id of the saved dictation in DictationHistory (when history is on). */
         const val HISTORY_ID = "cz.vyvrnc.transcribronpu.HISTORY_ID"
 
+        /** Boolean in the results: some segment failed, so the text may be incomplete. */
+        const val SEGMENT_FAILED = "cz.vyvrnc.transcribronpu.SEGMENT_FAILED"
+
         private const val TAG = "Rozpoznávání"
         private const val LIVE_INTERVAL_MS = 900L
         private const val LIVE_MIN_SAMPLES = 16000 * 3 / 4
@@ -378,7 +381,9 @@ class MainRecognitionService : RecognitionService() {
                             return@vadAndTranscribe
                         }
 
-                        val transcription = transcriptions[transcriptionIndex]!!
+                        // Auto-stop raced the tap: VAD may have moved on before the next segment
+                        // exists. The recording loop still ends and delivers the results.
+                        val transcription = transcriptions[transcriptionIndex] ?: return@vadAndTranscribe
 
                         if ((transcriptionIndex == 0) && !isSpeaking) {
                             transcription.start = 0.toDouble()
@@ -587,6 +592,7 @@ class MainRecognitionService : RecognitionService() {
                     )
                 )
                 if (historyId != null) putString(HISTORY_ID, historyId)
+                putBoolean(SEGMENT_FAILED, segmentFailed.get())
             }
 
 
