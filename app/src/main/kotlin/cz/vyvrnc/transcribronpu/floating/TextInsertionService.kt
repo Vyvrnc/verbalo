@@ -13,13 +13,14 @@ import cz.vyvrnc.transcribronpu.llm.LlmCleaner
 
 /**
  * Inserts dictated text into the focused text field of any app, at the cursor (replacing a
- * selection); without input focus into the last editable field of the foreground app. Used only
+ * selection); without input focus into the only editable field of the foreground app. Used only
  * by the floating button; it reads no screen content beyond finding that field (its app, hint
  * and text, as context for the on-device cleanup) and keeps nothing.
  */
 class TextInsertionService : AccessibilityService() {
     companion object {
         @Volatile private var instance: TextInsertionService? = null
+        private const val MAX_NODES = 400
 
         /** True when inserted, false when there is no editable field, null when the service is not bound. */
         fun insert(text: String): Boolean? = instance?.insertText(text)
@@ -87,7 +88,8 @@ class TextInsertionService : AccessibilityService() {
 
     /**
      * The field to write into: the one with input focus, otherwise (chat opened but the field not
-     * tapped yet) the last visible editable field of the foreground app, usually the composer.
+     * tapped yet) the only visible editable field of the foreground app. With several candidates
+     * (search box and composer) it gives up and the text goes to the clipboard.
      */
     private fun editableField(): AccessibilityNodeInfo? {
         findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let {
@@ -103,30 +105,44 @@ class TextInsertionService : AccessibilityService() {
             lastLookup = "pole s kurzorem v okně ${root.packageName}"
             return it
         }
-        val field = lastEditable(root)
-        lastLookup = if (field != null) "pole bez kurzoru v ${root.packageName}" else "${root.packageName} bez upravitelného pole"
+        val (field, why) = onlyEditable(root)
+        lastLookup = "${root.packageName}: $why"
         return field
     }
 
-    /** Root of the foreground app window, skipping our own overlay, the keyboard and system UI. */
-    private fun appWindowRoot(): AccessibilityNodeInfo? =
-        windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-            .sortedWith(compareByDescending<AccessibilityWindowInfo> { it.isFocused }.thenByDescending { it.isActive })
-            .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() != packageName } }
-            ?: rootInActiveWindow?.takeIf { it.packageName?.toString() != packageName }
+    /**
+     * Root of the one foreground app window: focused, else active, else the only one. Our overlay
+     * is TYPE_SYSTEM, not TYPE_APPLICATION. An unavailable root never falls through to another
+     * app in split screen.
+     */
+    private fun appWindowRoot(): AccessibilityNodeInfo? {
+        val apps = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        val window = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: apps.singleOrNull()
+        val root = if (apps.isEmpty()) rootInActiveWindow else window?.root
+        return root?.takeIf { it.packageName?.toString() != packageName }
+    }
 
-    private fun lastEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    /**
+     * The single visible editable node under [root]. Runs on the main thread and every child is a
+     * call into the other app, so the walk has a hard budget of fetched nodes.
+     */
+    private fun onlyEditable(root: AccessibilityNodeInfo): Pair<AccessibilityNodeInfo?, String> {
         var found: AccessibilityNodeInfo? = null
-        var visited = 0
+        var fetched = 1
         val stack = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
-        // Depth-first in screen order; capped so a huge list cannot stall the dictation.
-        while (stack.isNotEmpty() && visited < 3000) {
+        while (stack.isNotEmpty()) {
             val node = stack.removeLast()
-            visited++
-            if (node.isEditable && node.isVisibleToUser) found = node
-            for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.add(it) }
+            if (node.isEditable && node.isVisibleToUser) {
+                if (found != null) return null to "víc polí bez kurzoru, nevím kam"
+                found = node
+            }
+            for (i in 0 until node.childCount) {
+                if (fetched >= MAX_NODES) return null to "okno je moc velké na hledání pole"
+                fetched++
+                node.getChild(i)?.let { stack.add(it) }
+            }
         }
-        return found
+        return found to (if (found != null) "jediné pole bez kurzoru" else "bez upravitelného pole")
     }
 
     private fun insertText(text: String): Boolean {
