@@ -1,6 +1,13 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -40,6 +47,8 @@ fun CleanupSettings() {
     var enabled by remember { mutableStateOf(NpuSettings.cleanup(context)) }
     var customPrompt by remember { mutableStateOf(NpuSettings.cleanupPrompt(context)) }
     var promptDialog by remember { mutableStateOf(false) }
+    var appRules by remember { mutableStateOf(NpuSettings.cleanupApps(context)) }
+    var appsDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth()) {
         if (model == LlmModel.NPU) {
@@ -62,7 +71,8 @@ fun CleanupSettings() {
         SettingsSwitchItem(
             name = "Úprava diktátu",
             description = when {
-                !enabled -> "Text z plovoucího tlačítka se vkládá tak, jak ho Whisper přepsal."
+                !enabled -> "Text z plovoucího tlačítka se vkládá tak, jak ho Whisper přepsal " +
+                    "(kromě aplikací, kde je úprava zapnutá níže)."
                 !ready -> "Bez staženého modelu se text vloží neupravený."
                 else -> "Opraví chyby přepisu, interpunkci a přeřeky. Výčet převede na odrážky, " +
                     "v e-mailu udělá odstavce – podle obsahu a aplikace, do které píšete. " +
@@ -72,6 +82,26 @@ fun CleanupSettings() {
             onCheckedChange = {
                 enabled = it
                 NpuSettings.setCleanup(context, it)
+            },
+        )
+        ListItem(
+            modifier = Modifier.clickable {
+                appRules = NpuSettings.cleanupApps(context)
+                appsDialog = true
+            },
+            headlineContent = { Text("Podle aplikace", fontWeight = FontWeight.SemiBold) },
+            supportingContent = {
+                Text(
+                    if (appRules.isEmpty()) {
+                        "Všude stejně. Klepnutím nastavíte aplikace, kde chcete jen přepis (třeba chat " +
+                            "s AI), nebo naopak úpravu."
+                    } else {
+                        appRules.entries
+                            .map { (pkg, on) -> appLabel(context, pkg) to on }
+                            .sortedBy { it.first.lowercase() }
+                            .joinToString(" · ") { (label, on) -> "$label: ${if (on) "úprava" else "jen přepis"}" }
+                    }
+                )
             },
         )
         ListItem(
@@ -100,6 +130,14 @@ fun CleanupSettings() {
         )
     }
 
+    if (appsDialog) {
+        AppRulesDialog(
+            defaultOn = enabled,
+            onChanged = { appRules = it },
+            onDismiss = { appsDialog = false },
+        )
+    }
+
     if (promptDialog) {
         PromptDialog(
             initial = customPrompt ?: LlmCleaner.DEFAULT_PROMPT,
@@ -118,6 +156,105 @@ fun CleanupSettings() {
             },
         )
     }
+}
+
+private data class AppEntry(val packageName: String, val label: String)
+
+private fun appLabel(context: Context, packageName: String): String = runCatching {
+    val pm = context.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+}.getOrDefault(packageName)
+
+/** Apps with a launcher icon (visible through the MAIN query in the manifest), plus apps with a rule. */
+private fun launcherApps(context: Context, rules: Set<String>): List<AppEntry> {
+    val pm = context.packageManager
+    val launcher = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+        .map { AppEntry(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+        .filter { it.packageName != context.packageName }
+        .distinctBy { it.packageName }
+    val missing = rules.filter { pkg -> launcher.none { it.packageName == pkg } }
+        .map { AppEntry(it, appLabel(context, it)) }
+    return launcher + missing
+}
+
+/**
+ * Per-app cleanup: a tap cycles default -> cleanup -> raw transcript. Apps that had a rule when
+ * the dialog opened stay on top, so rows do not jump while tapping.
+ */
+@Composable
+private fun AppRulesDialog(defaultOn: Boolean, onChanged: (Map<String, Boolean>) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current.applicationContext
+    var rules by remember { mutableStateOf(NpuSettings.cleanupApps(context)) }
+    val pinned = remember { rules.keys }
+    val apps by produceState<List<AppEntry>?>(null) {
+        value = withContext(Dispatchers.IO) { launcherApps(context, pinned) }
+    }
+    var query by remember { mutableStateOf("") }
+    val defaultText = if (defaultOn) "výchozí (úprava)" else "výchozí (jen přepis)"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Úprava podle aplikace") },
+        text = {
+            Column {
+                Text(
+                    "Klepnutím přepínáte: výchozí → úprava → jen přepis. Jen přepis se vkládá už během " +
+                        "mluvení, bez čekání na Gemmu. Aplikaci pozná jen zapnuté vkládání do pole.",
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Hledat aplikaci") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                )
+                val list = apps
+                if (list == null) {
+                    Text("Načítám aplikace…", Modifier.padding(top = 12.dp))
+                } else {
+                    val shown = list
+                        .filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
+                        .sortedWith(compareBy({ it.packageName !in pinned }, { it.label.lowercase() }))
+                    LazyColumn(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .padding(top = 8.dp)
+                    ) {
+                        items(shown, key = { it.packageName }) { app ->
+                            val rule = rules[app.packageName]
+                            ListItem(
+                                modifier = Modifier.clickable {
+                                    val next = when (rule) {
+                                        null -> true
+                                        true -> false
+                                        false -> null
+                                    }
+                                    NpuSettings.setCleanupApp(context, app.packageName, next)
+                                    rules = NpuSettings.cleanupApps(context)
+                                    onChanged(rules)
+                                },
+                                headlineContent = { Text(app.label) },
+                                trailingContent = {
+                                    Text(
+                                        when (rule) {
+                                            null -> defaultText
+                                            true -> "úprava"
+                                            false -> "jen přepis"
+                                        },
+                                        fontWeight = if (rule != null) FontWeight.SemiBold else null,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Hotovo") } },
+    )
 }
 
 @Composable

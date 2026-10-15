@@ -4,10 +4,10 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * Export and import of the user's customisation (vocabulary, replacements, cleanup prompt) as
- * one JSON file, to move it to another phone or share it within a team. Import merges the
- * vocabulary and the replacements (nothing is lost) and replaces the prompt when the file
- * has one.
+ * Export and import of the user's customisation (vocabulary, replacements, cleanup prompt,
+ * per-app cleanup rules) as one JSON file, to move it to another phone or share it within a
+ * team. Import merges the vocabulary, the replacements and the app rules (nothing is lost) and
+ * replaces the prompt when the file has one.
  */
 object Customization {
     private const val FORMAT = "transcribro-npu-customization"
@@ -18,6 +18,7 @@ object Customization {
         .put("vocabulary", NpuSettings.vocabulary(context))
         .put("replacements", NpuSettings.replacements(context))
         .apply { NpuSettings.cleanupPrompt(context)?.let { put("cleanupPrompt", it) } }
+        .apply { NpuSettings.cleanupAppsText(context).takeIf { it.isNotEmpty() }?.let { put("cleanupApps", it) } }
         .toString(2)
 
     /** Returns a short Czech summary for the user; throws IllegalArgumentException on a foreign file. */
@@ -46,7 +47,13 @@ object Customization {
         val prompt = if (o.has("cleanupPrompt")) o.getString("cleanupPrompt") else null
         if (prompt != null) NpuSettings.setCleanupPrompt(context, prompt)
 
+        // Like the replacements: rules already set on this phone win.
+        val oldApps = NpuSettings.cleanupApps(context)
+        val newApps = NpuSettings.parseCleanupApps(o.optString("cleanupApps")).filterKeys { it !in oldApps }
+        if (newApps.isNotEmpty()) NpuSettings.setCleanupApps(context, oldApps + newApps)
+
         return "Přidáno: ${newTerms.size} výrazů do slovníku, ${newLines.size} náhrad" +
+            (if (newApps.isNotEmpty()) ", ${newApps.size} pravidel pro aplikace" else "") +
             (if (prompt != null) ", pokyny pro úpravu textu nahrazeny." else ".")
     }
 }

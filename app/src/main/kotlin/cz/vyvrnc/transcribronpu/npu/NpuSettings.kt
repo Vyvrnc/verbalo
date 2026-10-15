@@ -18,6 +18,7 @@ object NpuSettings {
     private const val KEY_CLEANUP_MODE = "cleanup_mode"
     private const val KEY_CLEANUP = "cleanup"
     private const val KEY_CLEANUP_NPU = "cleanup_npu"
+    private const val KEY_CLEANUP_APPS = "cleanup_apps"
     private const val KEY_HISTORY = "save_history"
     private const val KEY_CLEANUP_PROMPT = "cleanup_prompt"
 
@@ -65,6 +66,38 @@ object NpuSettings {
         return p.getString(KEY_CLEANUP_MODE, null).let { it != null && it != "OFF" }
     }
     fun setCleanup(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_CLEANUP, value).apply()
+
+    /** Per-app override of [cleanup]: package to on/off. Apps not listed follow the switch. */
+    fun cleanupApps(context: Context): Map<String, Boolean> =
+        parseCleanupApps(prefs(context).getString(KEY_CLEANUP_APPS, null).orEmpty())
+    fun cleanupAppsText(context: Context): String = formatCleanupApps(cleanupApps(context))
+    fun setCleanupApps(context: Context, apps: Map<String, Boolean>) =
+        prefs(context).edit().putString(KEY_CLEANUP_APPS, formatCleanupApps(apps)).apply()
+
+    /** null removes the app's rule, so it follows the switch again. */
+    fun setCleanupApp(context: Context, packageName: String, value: Boolean?) =
+        setCleanupApps(context, cleanupApps(context).toMutableMap().apply {
+            if (value == null) remove(packageName) else put(packageName, value)
+        })
+
+    /** Whether dictation into [packageName] gets cleaned up; null (target unknown) follows the switch. */
+    fun cleanupFor(context: Context, packageName: String?): Boolean =
+        packageName?.let { cleanupApps(context)[it] } ?: cleanup(context)
+
+    /** "package=on" / "package=off" per line. */
+    fun parseCleanupApps(text: String): Map<String, Boolean> =
+        text.lines().mapNotNull { line ->
+            val i = line.lastIndexOf('=')
+            if (i <= 0) return@mapNotNull null
+            when (line.substring(i + 1).trim()) {
+                "on" -> line.substring(0, i).trim() to true
+                "off" -> line.substring(0, i).trim() to false
+                else -> null
+            }
+        }.toMap()
+
+    private fun formatCleanupApps(apps: Map<String, Boolean>): String =
+        apps.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}=${if (it.value) "on" else "off"}" }
 
     /** The user's own instructions for the cleanup model; null means the built-in prompt. */
     fun cleanupPrompt(context: Context): String? =

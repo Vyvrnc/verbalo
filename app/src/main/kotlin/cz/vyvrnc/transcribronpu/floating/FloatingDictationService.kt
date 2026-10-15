@@ -248,8 +248,11 @@ class FloatingDictationService : Service() {
         bubbleDismissed = false
         historyId = null
         // Not preloaded while speaking: Whisper and Gemma do not fit in memory together.
-        cleanup = NpuSettings.cleanupModel(this).takeIf { NpuSettings.cleanup(this) && it.ready(this) }
-        target = if (cleanup != null) TextInsertionService.target() else null
+        // The target app decides: some apps get the raw transcript, inserted while speaking.
+        val focused = TextInsertionService.target()
+        cleanup = NpuSettings.cleanupModel(this)
+            .takeIf { NpuSettings.cleanupFor(this, focused?.packageName) && it.ready(this) }
+        target = if (cleanup != null) focused else null
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble(if (TextInsertionService.target() == null && !TextInsertionService.enabled(this)) {

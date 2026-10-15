@@ -28,6 +28,9 @@ Changes against upstream:
   "středník", brackets.
 - The cleanup instructions (prompt) can be edited in the app; vocabulary, replacements and the prompt
   can be exported and imported as a JSON file.
+- Cleanup per app: each app can be set to cleanup or raw transcript, the rest follows the switch.
+  The raw transcript is inserted while speaking, without waiting for Gemma (needs the
+  accessibility service, which tells the target app). The rules are part of the JSON export.
 - Experimental: Gemma on the NPU (the SM8750 build, 3.0 GB) instead of the GPU.
 - Model downloads run in a foreground service, so they continue in the background.
 
