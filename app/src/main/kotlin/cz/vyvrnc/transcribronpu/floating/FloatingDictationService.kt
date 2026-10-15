@@ -47,8 +47,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import dev.soupslurpr.transcribro.R
 import dev.soupslurpr.transcribro.dataStore
 import dev.soupslurpr.transcribro.preferences.PreferencesUiState
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import androidx.datastore.preferences.core.Preferences
 import dev.soupslurpr.transcribro.recognitionservice.MainRecognitionService
 import kotlin.math.abs
 
@@ -103,11 +102,15 @@ class FloatingDictationService : Service() {
     /** "Auto-Send Transcription" read at the start of this dictation. */
     private var autoSend = false
 
+    /** The app's settings (keyboard switches), kept current so a tap never waits for the disk. */
+    @Volatile private var settings: Preferences? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
+        scope.launch { dataStore.data.collect { settings = it } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -264,9 +267,10 @@ class FloatingDictationService : Service() {
             "úprava ${if (cleanup != null) "ano" else "ne"}")
         // The keyboard's switches in the settings apply to the floating button too.
         val prefs = PreferencesUiState()
-        val stored = runCatching { runBlocking { dataStore.data.first() } }.getOrNull()
+        val stored = settings
         val autoStop = stored?.get(prefs.autoStopRecognition.first) ?: prefs.autoStopRecognition.second.value
         autoSend = stored?.get(prefs.autoSendTranscription.first) ?: prefs.autoSendTranscription.second.value
+        TextInsertionService.newDictation()
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble(when {
@@ -285,7 +289,8 @@ class FloatingDictationService : Service() {
         })
     }
 
-    private fun finishDictation(message: String?) {
+    /** [ok] false: recognition failed, so the text must not be auto-sent. */
+    private fun finishDictation(message: String?, ok: Boolean) {
         dictating = false
         button?.let { paintButton(it, false) }
         val model = cleanup
@@ -313,11 +318,12 @@ class FloatingDictationService : Service() {
                 sessionText.append(cleaned)
                 if (insert(cleaned) != true) insertFailed = true
                 cleaning = false
-                deliverEnd(message ?: result.error?.let { "Úprava textu se nepovedla, vložen původní text" })
+                deliverEnd(message ?: result.error?.let { "Úprava textu se nepovedla, vložen původní text" },
+                    ok && result.error == null)
             }
             return
         }
-        deliverEnd(message)
+        deliverEnd(message, ok)
     }
 
     /** Inserts into the focused field and logs why it did not work. */
@@ -335,9 +341,9 @@ class FloatingDictationService : Service() {
         return result
     }
 
-    private fun deliverEnd(message: String?) {
-        if (autoSend && !insertFailed && sessionText.isNotBlank()) {
-            AppLog.i(this, TAG, "odeslání: ${if (TextInsertionService.send()) "Enter/Odeslat v poli" else "pole odeslání nepřijalo"}")
+    private fun deliverEnd(message: String?, ok: Boolean) {
+        if (autoSend && ok && !insertFailed && sessionText.isNotBlank()) {
+            AppLog.i(this, TAG, "odeslání: ${TextInsertionService.send()}")
         }
         if (insertFailed && sessionText.isNotEmpty()) {
             getSystemService(ClipboardManager::class.java)
@@ -376,7 +382,7 @@ class FloatingDictationService : Service() {
 
         override fun onResults(results: Bundle?) {
             historyId = results?.getString(MainRecognitionService.HISTORY_ID)
-            finishDictation(null)
+            finishDictation(null, ok = true)
         }
 
         override fun onError(error: Int) = finishDictation(
@@ -386,7 +392,8 @@ class FloatingDictationService : Service() {
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Rozpoznávání je zaneprázdněné"
                 SpeechRecognizer.ERROR_CLIENT -> "Přepis se nepovedl"
                 else -> null
-            }
+            },
+            ok = false,
         )
     }
 

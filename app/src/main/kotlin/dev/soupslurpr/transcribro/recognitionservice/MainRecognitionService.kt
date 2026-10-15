@@ -384,6 +384,12 @@ class MainRecognitionService : RecognitionService() {
                             transcription.start = 0.toDouble()
                         }
 
+                        // Auto-stop raced the tap: VAD already closed the last segment and this one
+                        // has no speech start. Nothing to transcribe, and start!! below would throw.
+                        if (transcription.start == null) {
+                            return@vadAndTranscribe
+                        }
+
                         synchronized(transcription) {
                             transcription.end = (transcription.audioData.size - 1).toDouble()
                         }

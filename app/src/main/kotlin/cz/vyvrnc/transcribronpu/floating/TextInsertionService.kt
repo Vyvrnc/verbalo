@@ -40,7 +40,12 @@ class TextInsertionService : AccessibilityService() {
          * keyboard's "Auto-Send Transcription". What it does is up to the app: send in a chat,
          * a new line in an e-mail body.
          */
-        fun send(): Boolean = instance?.sendText() ?: false
+        fun send(): String = instance?.sendText() ?: "služba nepřipojená, neodesláno"
+
+        /** Forgets the field of the previous dictation, so auto-send never reaches it. */
+        fun newDictation() {
+            instance?.let { it.insertedInto = null; it.splitAcrossFields = false }
+        }
 
         /** Bound by the system; can be false while the service is switched on in the settings. */
         fun connected(): Boolean = instance != null
@@ -152,10 +157,30 @@ class TextInsertionService : AccessibilityService() {
         return found to (if (found != null) "jediné pole bez kurzoru" else "bez upravitelného pole")
     }
 
-    private fun sendText(): Boolean {
-        val node = editableField() ?: return false
-        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+    /** The field this dictation's text went into; auto-send acts only on it. */
+    @Volatile private var insertedInto: AccessibilityNodeInfo? = null
+
+    /** Parts of this dictation went into different fields: sending either would be a guess. */
+    @Volatile private var splitAcrossFields = false
+
+    private fun inserted(node: AccessibilityNodeInfo) {
+        if (insertedInto != null && insertedInto != node) splitAcrossFields = true
+        insertedInto = node
+    }
+
+    private fun sendText(): String {
+        val node = insertedInto ?: return "text nebyl vložen do pole, neodesláno"
+        if (splitAcrossFields) return "diktát šel do víc polí, neodesláno"
+        // The user may have moved to another field (another draft) while the text was finishing.
+        if (editableField() != node || !node.refresh()) return "pole se mezitím změnilo, neodesláno"
+        if (!node.isFocused && !node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
+            return "pole nepřijalo fokus, neodesláno"
+        }
+        return if (node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) {
+            "Enter/Odeslat v poli"
+        } else {
+            "pole odeslání nepřijalo"
+        }
     }
 
     private fun insertText(text: String): Boolean {
@@ -177,6 +202,7 @@ class TextInsertionService : AccessibilityService() {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, before + insert + after)
         }
         if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, setText)) {
+            inserted(node)
             val cursor = before.length + insert.length
             node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
@@ -188,6 +214,6 @@ class TextInsertionService : AccessibilityService() {
         // needs the input focus (the field may have been found without it).
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Diktát", insert))
-        return node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        return node.performAction(AccessibilityNodeInfo.ACTION_PASTE).also { if (it) inserted(node) }
     }
 }
