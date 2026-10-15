@@ -45,6 +45,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import dev.soupslurpr.transcribro.R
+import dev.soupslurpr.transcribro.dataStore
+import dev.soupslurpr.transcribro.preferences.PreferencesUiState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import dev.soupslurpr.transcribro.recognitionservice.MainRecognitionService
 import kotlin.math.abs
 
@@ -95,6 +99,9 @@ class FloatingDictationService : Service() {
     /** The dictation's entry in DictationHistory, from the recognition result. */
     private var historyId: String? = null
     private var insertFailed = false
+
+    /** "Auto-Send Transcription" read at the start of this dictation. */
+    private var autoSend = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -255,6 +262,11 @@ class FloatingDictationService : Service() {
         target = if (cleanup != null) focused else null
         AppLog.i(this, TAG, "diktát: cíl ${focused?.packageName ?: "neznámý"} (${TextInsertionService.lastLookup}), " +
             "úprava ${if (cleanup != null) "ano" else "ne"}")
+        // The keyboard's switches in the settings apply to the floating button too.
+        val prefs = PreferencesUiState()
+        val stored = runCatching { runBlocking { dataStore.data.first() } }.getOrNull()
+        val autoStop = stored?.get(prefs.autoStopRecognition.first) ?: prefs.autoStopRecognition.second.value
+        autoSend = stored?.get(prefs.autoSendTranscription.first) ?: prefs.autoSendTranscription.second.value
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble(when {
@@ -268,8 +280,8 @@ class FloatingDictationService : Service() {
             putExtra(MainRecognitionService.EXTRA_SOURCE, "plovoucí tlačítko")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(MainRecognitionService.EXTRA_LIVE_PARTIALS, true)
-            // Ends with the next tap, so pauses while thinking do not cut the dictation.
-            putExtra(MainRecognitionService.EXTRA_AUTO_STOP, false)
+            // Off: ends with the next tap, so pauses while thinking do not cut the dictation.
+            putExtra(MainRecognitionService.EXTRA_AUTO_STOP, autoStop)
         })
     }
 
@@ -324,6 +336,9 @@ class FloatingDictationService : Service() {
     }
 
     private fun deliverEnd(message: String?) {
+        if (autoSend && !insertFailed && sessionText.isNotBlank()) {
+            AppLog.i(this, TAG, "odeslání: ${if (TextInsertionService.send()) "Enter/Odeslat v poli" else "pole odeslání nepřijalo"}")
+        }
         if (insertFailed && sessionText.isNotEmpty()) {
             getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("Diktát", sessionText.toString()))

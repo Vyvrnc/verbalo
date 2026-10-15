@@ -35,6 +35,13 @@ class TextInsertionService : AccessibilityService() {
             return service?.focusedTarget()
         }
 
+        /**
+         * The keyboard's send/enter action in the field the dictation went into, like the
+         * keyboard's "Auto-Send Transcription". What it does is up to the app: send in a chat,
+         * a new line in an e-mail body.
+         */
+        fun send(): Boolean = instance?.sendText() ?: false
+
         /** Bound by the system; can be false while the service is switched on in the settings. */
         fun connected(): Boolean = instance != null
 
@@ -143,6 +150,12 @@ class TextInsertionService : AccessibilityService() {
             }
         }
         return found to (if (found != null) "jediné pole bez kurzoru" else "bez upravitelného pole")
+    }
+
+    private fun sendText(): Boolean {
+        val node = editableField() ?: return false
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
     }
 
     private fun insertText(text: String): Boolean {
