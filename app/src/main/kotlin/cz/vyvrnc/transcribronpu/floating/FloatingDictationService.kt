@@ -253,12 +253,16 @@ class FloatingDictationService : Service() {
         cleanup = NpuSettings.cleanupModel(this)
             .takeIf { NpuSettings.cleanupFor(this, focused?.packageName) && it.ready(this) }
         target = if (cleanup != null) focused else null
+        AppLog.i(this, TAG, "diktát: cíl ${focused?.packageName ?: "neznámý"} (${TextInsertionService.lastLookup}), " +
+            "úprava ${if (cleanup != null) "ano" else "ne"}")
         dictating = true
         button?.let { paintButton(it, true) }
-        showBubble(if (TextInsertionService.target() == null && !TextInsertionService.enabled(this)) {
-            "Poslouchám… (vkládání do pole je vypnuté, text půjde do schránky)"
-        } else {
-            "Poslouchám…"
+        showBubble(when {
+            focused != null -> "Poslouchám…"
+            !TextInsertionService.enabled(this) -> "Poslouchám… (vkládání do pole je vypnuté, text půjde do schránky)"
+            !TextInsertionService.connected() ->
+                "Poslouchám… (Android vkládání uspal – vypněte a zapněte ho v Usnadnění, text půjde do schránky)"
+            else -> "Poslouchám…"
         })
         r.startListening(Intent().apply {
             putExtra(MainRecognitionService.EXTRA_SOURCE, "plovoucí tlačítko")
@@ -309,8 +313,12 @@ class FloatingDictationService : Service() {
         val result = TextInsertionService.insert(text)
         when (result) {
             true -> {}
-            false -> AppLog.i(this, TAG, "vložení: žádné upravitelné pole v popředí, text jde do schránky")
-            null -> AppLog.i(this, TAG, "vložení: služba přístupnosti „vkládání diktátu“ je vypnutá, text jde do schránky")
+            false -> AppLog.i(this, TAG, "vložení: ${TextInsertionService.lastLookup}, text jde do schránky")
+            null -> AppLog.i(this, TAG, if (TextInsertionService.enabled(this)) {
+                "vložení: služba je v Usnadnění zapnutá, ale Android ji odpojil, text jde do schránky"
+            } else {
+                "vložení: služba přístupnosti „vkládání diktátu“ je vypnutá, text jde do schránky"
+            })
         }
         return result
     }
