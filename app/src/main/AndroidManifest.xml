@@ -77,6 +77,10 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <service
+            android:name="cz.vyvrnc.transcribronpu.file.FileTranscriptionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
             android:name="cz.vyvrnc.transcribronpu.floating.TextInsertionService"
             android:exported="false"
             android:label="@string/text_insertion_service_label"

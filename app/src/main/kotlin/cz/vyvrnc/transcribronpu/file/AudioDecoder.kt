@@ -70,6 +70,7 @@ object AudioDecoder {
         var inputDone = false
         var written = 0L
         var out = ShortArray(0)
+        var idleAfterInput = 0
 
         while (true) {
             coroutineContext.ensureActive()
@@ -88,6 +89,9 @@ object AudioDecoder {
                 }
             }
             val o = codec.dequeueOutputBuffer(info, TIMEOUT_US)
+            // A decoder that never signals the end of output must not spin forever (~5 s idle).
+            if (o == MediaCodec.INFO_TRY_AGAIN_LATER && inputDone && ++idleAfterInput > 500) break
+            if (o >= 0) idleAfterInput = 0
             when {
                 o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     val f = codec.outputFormat
@@ -102,7 +106,8 @@ object AudioDecoder {
                     buf.position(info.offset)
                     buf.limit(info.offset + info.size)
                     val frames = info.size / ((if (float) 4 else 2) * channels)
-                    if (out.size < frames * 2 + 2) out = ShortArray(frames * 2 + 2)
+                    val capacity = frames * resampler.maxOutputsPerInput + 2
+                    if (out.size < capacity) out = ShortArray(capacity)
                     var n = 0
                     for (f in 0 until frames) {
                         // Downmix to mono.
@@ -131,6 +136,7 @@ object AudioDecoder {
      */
     private class Resampler(sourceRate: Int) {
         private val step = sourceRate.toDouble() / RATE   // input samples per output sample
+        val maxOutputsPerInput = if (step >= 1.0) 1 else kotlin.math.ceil(1.0 / step).toInt() + 1
         private var acc = 0.0
         private var weight = 0.0
         private var prev = 0f

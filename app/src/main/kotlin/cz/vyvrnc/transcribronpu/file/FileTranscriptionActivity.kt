@@ -78,6 +78,11 @@ class FileTranscriptionActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> intent.data
             else -> null
         } ?: return
+        // content:// only: a file:// path would be read with this app's rights, private files included.
+        if (uri.scheme != "content") {
+            Toast.makeText(this, "Nahrávku pošlete přes Sdílet nebo ji vyberte v appce", Toast.LENGTH_LONG).show()
+            return
+        }
         startOn(uri)
     }
 
@@ -137,6 +142,12 @@ private fun FileTranscriptionScreen(onPicked: (Uri) -> Unit) {
             }
             is FileTranscription.State.Done -> {
                 Text("${s.name} · ${minutes(s.audioSec)} zvuku přepsáno za ${minutes(s.tookMs / 1000.0)}")
+                if (s.failedWindows > 0) {
+                    Text(
+                        "${s.failedWindows}× se úsek nepřepsal, v textu je označený [úsek …].",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = {
                         context.getSystemService(ClipboardManager::class.java)

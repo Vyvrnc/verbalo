@@ -42,7 +42,8 @@ object FileTranscription {
         data object Idle : State
         data class Decoding(val name: String, val progress: Float) : State
         data class Transcribing(val name: String, val progress: Float, val text: String, val audioSec: Double) : State
-        data class Done(val name: String, val text: String, val audioSec: Double, val tookMs: Long) : State
+        /** [failedWindows]: parts the NPU could not transcribe, marked in [text]. */
+        data class Done(val name: String, val text: String, val audioSec: Double, val tookMs: Long, val failedWindows: Int) : State
         data class Failed(val name: String, val message: String) : State
     }
 
@@ -51,7 +52,8 @@ object FileTranscription {
     val state: StateFlow<State> = _state.asStateFlow()
     private var job: Job? = null
 
-    val busy: Boolean get() = job?.isActive == true
+    /** Until the job has really ended: a cancelled one may still sit in a native NPU call. */
+    val busy: Boolean get() = job?.isCompleted == false
 
     fun start(context: Context, uri: Uri) {
         if (busy) return
@@ -59,6 +61,7 @@ object FileTranscription {
         val name = displayName(app, uri)
         _state.value = State.Decoding(name, 0f)
         job = scope.launch { run(app, uri, name) }
+        FileTranscriptionService.start(app)
     }
 
     fun cancel() {
@@ -73,43 +76,52 @@ object FileTranscription {
     private suspend fun run(app: Context, uri: Uri, name: String) {
         val t0 = System.currentTimeMillis()
         val id = DictationHistory.newId()
-        val recorder = DictationHistory.Recorder(app, id)
+        var recorder: DictationHistory.Recorder? = null
         var kept = false
         try {
+            val rec = DictationHistory.Recorder(app, id).also { recorder = it }
             if (!NpuModel.ready(app)) throw AudioDecoder.Unsupported("NPU model není stažený (Nastavení → NPU model)")
-            val seconds = AudioDecoder.decode(app, uri, sink = { buf, n -> recorder.write(buf, n) }) {
+            val seconds = AudioDecoder.decode(app, uri, sink = { buf, n -> rec.write(buf, n) }) {
                 _state.value = State.Decoding(name, it)
             }
-            if (!recorder.finish() || seconds < 0.3) throw AudioDecoder.Unsupported("V souboru není žádný zvuk")
+            if (!rec.finish() || seconds < 0.3) throw AudioDecoder.Unsupported("V souboru není žádný zvuk")
             AppLog.i(app, TAG, "%s: %.1f s zvuku dekódováno za %d ms".format(name, seconds, System.currentTimeMillis() - t0))
 
             val language = NpuSettings.resolveLanguage(app, null)
-            val text = transcribe(app, id, language, name, seconds)
-            if (text.isBlank()) throw AudioDecoder.Unsupported("V nahrávce jsem nerozpoznal žádnou řeč")
+            val (text, failed) = transcribe(app, id, language, name, seconds)
+            if (text.isBlank()) {
+                throw AudioDecoder.Unsupported(if (failed > 0) "Přepis na NPU selhal" else "V nahrávce jsem nerozpoznal žádnou řeč")
+            }
             if (NpuSettings.saveHistory(app)) {
                 DictationHistory.saveTranscript(app, id, "soubor: $name", language, seconds, text)
                 kept = true
             }
             val took = System.currentTimeMillis() - t0
             AppLog.i(app, TAG, "%s: %.1f s přepsáno za %.1f s, %d znaků".format(name, seconds, took / 1000.0, text.length))
-            _state.value = State.Done(name, text, seconds, took)
+            _state.value = State.Done(name, text, seconds, took, failed)
         } catch (e: CancellationException) {
             _state.value = State.Idle
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable: an OutOfMemoryError must end as a message, not crash the app mid-state.
             AppLog.e(app, TAG, "$name: přepis souboru selhal", e)
             _state.value = State.Failed(
                 name,
                 (e as? AudioDecoder.Unsupported)?.message ?: "Soubor se nepodařilo přečíst nebo přepsat (${e.javaClass.simpleName})",
             )
         } finally {
-            recorder.discard()
+            recorder?.discard()
             if (!kept) DictationHistory.delete(app, id)
         }
     }
 
-    /** One window (up to 29.5 s, ending in the quietest moment) at a time, read from the wav. */
-    private suspend fun transcribe(app: Context, id: String, language: String, name: String, seconds: Double): String {
+    /**
+     * One window (up to 29.5 s, ending in the quietest moment) at a time, read from the wav.
+     * A window the NPU fails on twice is marked in the text and skipped, so an hour of work is
+     * not lost to one error. Returns the text and the number of such windows.
+     */
+    private suspend fun transcribe(app: Context, id: String, language: String, name: String, seconds: Double): Pair<String, Int> {
+        var failed = 0
         val whisper = WhisperRepository(app)
         val out = StringBuilder()
         RandomAccessFile(DictationHistory.audio(app, id), "r").use { wav ->
@@ -121,10 +133,11 @@ object FileTranscription {
                 val window = read(wav, start, min(total - start, SilenceSplitter.MAX_SAMPLES + 1))
                 val piece = SilenceSplitter.split(floats(window)).first()
                 val pcm = window.copyOfRange(piece.first, piece.last + 1)
+                val at = start
                 start += pcm.size
-                val level = rmsDbfs(pcm)
-                if (level > SILENCE_DBFS) {
-                    val part = whisper.transcribeAudio(amplified(pcm), language).trim()
+                if (loudestDbfs(pcm) > SILENCE_DBFS) {
+                    val part = transcribeWindow(app, whisper, amplified(pcm), language, name, at)
+                        ?: "[úsek ${clock(at)} se nepřepsal]".also { failed++ }
                     if (part.isNotEmpty()) {
                         if (out.isNotEmpty() && !out.endsWith('\n') && !part.startsWith('\n')) out.append(' ')
                         out.append(part)
@@ -133,7 +146,28 @@ object FileTranscription {
                 _state.value = State.Transcribing(name, start.toFloat() / total, out.toString(), seconds)
             }
         }
-        return out.toString().trim()
+        return out.toString().trim() to failed
+    }
+
+    /** Two attempts; null when both fail. Cancellation is never swallowed. */
+    private suspend fun transcribeWindow(
+        app: Context, whisper: WhisperRepository, pcm: ShortArray, language: String, name: String, at: Int,
+    ): String? {
+        repeat(2) { attempt ->
+            try {
+                return whisper.transcribeAudio(pcm, language).trim()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.e(app, TAG, "$name: úsek ${clock(at)}, pokus ${attempt + 1} selhal", e)
+            }
+        }
+        return null
+    }
+
+    private fun clock(sample: Int): String {
+        val s = sample / AudioDecoder.RATE
+        return "%d:%02d".format(s / 60, s % 60)
     }
 
     private fun read(wav: RandomAccessFile, start: Int, count: Int): ShortArray {
@@ -145,11 +179,22 @@ object FileTranscription {
 
     private fun floats(pcm: ShortArray) = FloatArray(pcm.size) { pcm[it] / 32768f }
 
-    private fun rmsDbfs(pcm: ShortArray): Double {
-        if (pcm.isEmpty()) return -120.0
-        var s = 0.0
-        for (v in pcm) s += v.toDouble() * v
-        return 20 * log10(max(sqrt(s / pcm.size) / 32768.0, 1e-6))
+    /**
+     * Level of the loudest 200 ms in the window. An average over 29.5 s would call two seconds of
+     * quiet speech in an otherwise silent window silence.
+     */
+    private fun loudestDbfs(pcm: ShortArray): Double {
+        val frame = AudioDecoder.RATE / 5
+        var best = 0.0
+        var i = 0
+        while (i < pcm.size) {
+            val end = min(pcm.size, i + frame)
+            var s = 0.0
+            for (k in i until end) s += pcm[k].toDouble() * pcm[k]
+            best = max(best, s / (end - i))
+            i = end
+        }
+        return 20 * log10(max(sqrt(best) / 32768.0, 1e-6))
     }
 
     /** Whisper reads quiet recordings worse than loud ones; raise the peak towards -3 dBFS. */
