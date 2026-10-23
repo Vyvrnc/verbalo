@@ -31,6 +31,11 @@ Changes against upstream:
 - Cleanup per app: each app can be set to cleanup or raw transcript, the rest follows the switch.
   The raw transcript is inserted while speaking, without waiting for Gemma (needs the
   accessibility service, which tells the target app). The rules are part of the JSON export.
+- Transcription of a recording ("Přepsat nahrávku" on the start screen, or Share from another app):
+  any format the phone decodes (m4a, mp3, ogg/opus voice messages, wav, flac, amr, video), streamed
+  to 16 kHz and transcribed one 30 s window at a time in a foreground service, with progress, copy
+  and share. Near-silent windows are skipped, quiet ones amplified.
+- The floating button follows Auto-Stop Recognition and Auto-Send Transcription.
 - Experimental: Gemma on the NPU (the SM8750 build, 3.0 GB) instead of the GPU.
 - Model downloads run in a foreground service, so they continue in the background.
 

@@ -36,6 +36,12 @@ class FileTranscriptionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(NotificationChannel(CHANNEL, "Přepis nahrávek", NotificationManager.IMPORTANCE_LOW))
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // startForegroundService() must always be answered with startForeground().
         startForeground(NOTIFICATION_ID, notification(FileTranscription.state.value), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -47,7 +53,8 @@ class FileTranscriptionService : Service() {
                 } else {
                     // Done, failed or cancelled: only the file cleanup is left, which needs no service.
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    // Only this start: a newer one (next file) keeps the service.
+                    stopSelf(startId)
                 }
             }
         }
@@ -67,8 +74,6 @@ class FileTranscriptionService : Service() {
     }
 
     private fun notification(s: FileTranscription.State): Notification {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Přepis nahrávek", NotificationManager.IMPORTANCE_LOW))
         val (text, progress) = when (s) {
             is FileTranscription.State.Decoding -> "Načítám ${s.name}" to s.progress
             is FileTranscription.State.Transcribing -> "Přepisuji ${s.name} – ${(s.progress * 100).toInt()} %" to s.progress

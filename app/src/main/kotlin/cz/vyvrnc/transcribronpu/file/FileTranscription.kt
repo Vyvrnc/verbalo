@@ -81,8 +81,14 @@ object FileTranscription {
         try {
             val rec = DictationHistory.Recorder(app, id).also { recorder = it }
             if (!NpuModel.ready(app)) throw AudioDecoder.Unsupported("NPU model není stažený (Nastavení → NPU model)")
+            // The decoder reports every input buffer, thousands a second: publish whole percents only.
+            var shown = -1
             val seconds = AudioDecoder.decode(app, uri, sink = { buf, n -> rec.write(buf, n) }) {
-                _state.value = State.Decoding(name, it)
+                val percent = (it * 100).toInt()
+                if (percent != shown) {
+                    shown = percent
+                    _state.value = State.Decoding(name, percent / 100f)
+                }
             }
             if (!rec.finish() || seconds < 0.3) throw AudioDecoder.Unsupported("V souboru není žádný zvuk")
             AppLog.i(app, TAG, "%s: %.1f s zvuku dekódováno za %d ms".format(name, seconds, System.currentTimeMillis() - t0))
