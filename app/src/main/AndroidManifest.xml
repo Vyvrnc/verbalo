@@ -124,6 +124,27 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="cz.vyvrnc.transcribronpu.file.FileTranscriptionActivity"
+            android:exported="true"
+            android:label="Přepsat nahrávku"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Transcribro">
+            <!-- Share a voice message or recording from another app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+        </activity>
 
     </application>
 

@@ -61,8 +61,8 @@ android {
         // The NPU path (QNN HTP v79) exists only on SM8750-class phones running Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.6.3"
+        versionCode = 11
+        versionName = "0.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

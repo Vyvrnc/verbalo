@@ -41,6 +41,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import cz.vyvrnc.transcribronpu.file.FileTranscriptionActivity
 import dev.soupslurpr.transcribro.R
 import dev.soupslurpr.transcribro.ui.reusablecomposables.ScreenLazyColumn
 import java.time.LocalDateTime
@@ -148,6 +149,22 @@ fun StartScreen() {
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+        item {
+            ElevatedCard {
+                Column(
+                    Modifier.padding(16.dp)
+                ) {
+                    Text("Přepis nahrávky ze souboru: hlasovka, nahraný hovor nebo video. Jde i přes Sdílet z jiné aplikace.")
+                    Spacer(Modifier.padding(8.dp))
+                    FilledTonalButton(
+                        onClick = { context.startActivity(Intent(context, FileTranscriptionActivity::class.java)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Přepsat nahrávku")
+                    }
+                }
             }
         }
         item {
