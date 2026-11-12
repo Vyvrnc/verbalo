@@ -28,6 +28,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import dev.soupslurpr.transcribro.R
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -45,6 +47,7 @@ fun ActionRecognizeSpeechScreen(
     val speechRecognizerUiState by speechRecognizerViewModel.uiState.collectAsState()
 
     val context = LocalContext.current
+    val busyMessage = stringResource(R.string.recognize_busy_snackbar)
 
     val microphonePermissionState = rememberPermissionState(
         Manifest.permission.RECORD_AUDIO
@@ -146,7 +149,7 @@ fun ActionRecognizeSpeechScreen(
     LaunchedEffect(speechRecognizerUiState.showRecognizerBusyOrClientError) {
         if (speechRecognizerUiState.showRecognizerBusyOrClientError) {
             showSnackbarError(
-                "Recognition is finishing, please wait or cancel.",
+                busyMessage,
                 null,
                 true,
                 SnackbarDuration.Short
@@ -183,9 +186,9 @@ fun ActionRecognizeSpeechScreen(
         Icon(
             imageVector = Icons.Outlined.Mic,
             contentDescription = if (speechRecognizerUiState.isRecognizing) {
-                "Speech recognition active"
+                stringResource(R.string.recognize_active_description)
             } else {
-                "Speech recognition inactive"
+                stringResource(R.string.recognize_inactive_description)
             },
             modifier = Modifier.size(165.dp)
         )

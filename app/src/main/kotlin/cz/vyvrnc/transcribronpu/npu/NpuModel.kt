@@ -1,6 +1,7 @@
 package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
+import dev.soupslurpr.transcribro.R
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -51,9 +52,9 @@ object NpuModel {
      * "<name>.deflate.part"), inflates them and checks size + CRC-32.
      */
     suspend fun download(context: Context, onProgress: (phase: String, done: Long, total: Long) -> Unit) =
-        lock.withLock { downloadLocked(dir(context).apply { mkdirs() }, onProgress) }
+        lock.withLock { downloadLocked(context, dir(context).apply { mkdirs() }, onProgress) }
 
-    private suspend fun downloadLocked(dir: File, onProgress: (String, Long, Long) -> Unit) {
+    private suspend fun downloadLocked(context: Context, dir: File, onProgress: (String, Long, Long) -> Unit) {
         var before = 0L
         for (e in ENTRIES) {
             val target = File(dir, e.name)
@@ -69,7 +70,7 @@ object NpuModel {
                 }
                 try {
                     if (conn.responseCode != HttpURLConnection.HTTP_PARTIAL) {
-                        error("HTTP ${conn.responseCode} ${conn.responseMessage} (čekáno 206)")
+                        error(context.getString(R.string.npu_error_http_range, conn.responseCode, conn.responseMessage.orEmpty()))
                     }
                     var got = 0L
                     FileOutputStream(packed, true).use { out ->
@@ -84,12 +85,12 @@ object NpuModel {
                                 got += n
                                 if (got - lastReport > (1 shl 20)) {
                                     lastReport = got
-                                    onProgress("Stahuji ${e.name}", before + packed.length(), DOWNLOAD_BYTES)
+                                    onProgress(context.getString(R.string.npu_phase_downloading, e.name), before + packed.length(), DOWNLOAD_BYTES)
                                 }
                             }
                         }
                     }
-                    if (got == 0L) error("Server neposlal žádná data")
+                    if (got == 0L) error(context.getString(R.string.llm_error_no_data))
                 } finally {
                     conn.disconnect()
                 }
@@ -111,7 +112,7 @@ object NpuModel {
                             written += n
                             if (written - lastReport > (16 shl 20)) {
                                 lastReport = written
-                                onProgress("Rozbaluji ${e.name}", written, e.size)
+                                onProgress(context.getString(R.string.npu_phase_unpacking, e.name), written, e.size)
                             }
                         }
                     }
@@ -122,16 +123,16 @@ object NpuModel {
                 if (bad is java.util.zip.ZipException || bad is java.io.EOFException) {
                     tmp.delete()
                     packed.delete()
-                    error("${e.name}: poškozená data (${bad.message}); stáhne se znovu")
+                    error(context.getString(R.string.npu_error_corrupt, e.name, bad.message.orEmpty()))
                 }
                 throw bad
             }
             if (written != e.size || crc.value != e.crc32) {
                 tmp.delete()
                 packed.delete()
-                error("${e.name}: kontrola selhala (velikost $written / ${e.size}, CRC ${crc.value} / ${e.crc32}); stáhne se znovu")
+                error(context.getString(R.string.npu_error_check_failed, e.name, written, e.size, crc.value, e.crc32))
             }
-            if (!tmp.renameTo(target)) error("Nelze přejmenovat ${tmp.name}")
+            if (!tmp.renameTo(target)) error(context.getString(R.string.llm_error_rename, tmp.name))
             packed.delete()
             before += e.compressedSize
         }

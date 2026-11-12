@@ -2,6 +2,8 @@ package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.StringRes
+import dev.soupslurpr.transcribro.R
 import cz.vyvrnc.transcribronpu.llm.LlmModel
 
 /**
@@ -27,15 +29,15 @@ object NpuSettings {
     const val LANGUAGE_AUTO = "auto"
     const val DEFAULT_LANGUAGE = "cs"
 
-    /** Choices offered in the settings: value to label. */
-    val LANGUAGE_CHOICES = listOf(
-        LANGUAGE_FROM_CALLER to "Podle aplikace (jinak čeština)",
-        "cs" to "Čeština",
-        "sk" to "Slovenština",
-        "en" to "Angličtina",
-        "de" to "Němčina",
-        "pl" to "Polština",
-        LANGUAGE_AUTO to "Rozpoznat automaticky",
+    /** Choices offered in the settings: value to label string resource. */
+    val LANGUAGE_CHOICES: List<Pair<String, Int>> = listOf(
+        LANGUAGE_FROM_CALLER to R.string.npu_language_from_app,
+        "cs" to R.string.npu_language_cs,
+        "sk" to R.string.npu_language_sk,
+        "en" to R.string.npu_language_en,
+        "de" to R.string.npu_language_de,
+        "pl" to R.string.npu_language_pl,
+        LANGUAGE_AUTO to R.string.npu_language_auto,
     )
 
     private fun prefs(context: Context): SharedPreferences =

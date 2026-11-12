@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Start -->
+    <string name="start_tagline">Převod řeči na text, přímo v telefonu</string>
+    <string name="start_section_transcribe">Přepis</string>
+    <string name="start_file_title">Přepsat nahrávku</string>
+    <string name="start_file_subtitle">Hlasovka, nahraný hovor nebo video. Jde i přes Sdílet z jiné aplikace.</string>
+    <string name="start_mic_title">Povolit mikrofon</string>
+    <string name="start_mic_subtitle">Potřeba pro diktování. Zvolte „Při používání aplikace“.</string>
+    <string name="start_keyboard_title">Zapnout hlasovou klávesnici</string>
+    <string name="start_keyboard_subtitle">V nastavení systému, v části Klávesnice na obrazovce</string>
+    <!-- Settings -->
+    <string name="settings_section_recognition">Rozpoznávání řeči (NPU)</string>
+    <string name="settings_section_floating">Plovoucí diktování</string>
+    <!-- Transcribe a recording -->
+    <string name="transcribe_title">Přepis nahrávky</string>
+    <string name="transcribe_idle_heading">Soubor, nebo Sdílet z jiné aplikace</string>
+    <string name="transcribe_idle_body">Vyberte nahrávku, nebo ji do Verbala pošlete přes Sdílet, třeba hlasovou zprávu z Telegramu. Přepisuje se v telefonu na NPU, nic se neodesílá. Jazyk a slovník platí podle nastavení. Stereo hovory z telefonu se rozdělí na Já a Protistranu.</string>
+    <string name="transcribe_pick">Vybrat nahrávku</string>
+    <string name="transcribe_pick_other">Vybrat jinou nahrávku</string>
+    <string name="transcribe_loading">Načítám %1$s…</string>
+    <string name="transcribe_progress">%1$s zvuku · %2$d %%</string>
+    <string name="transcribe_cancel">Zrušit</string>
+    <string name="transcribe_done">%1$s · %2$s zvuku přepsáno za %3$s</string>
+    <string name="transcribe_failed_windows">Nepřepsané úseky: %1$d, v textu jsou označené.</string>
+    <string name="transcribe_share">Sdílet / uložit</string>
+    <string name="transcribe_copy">Kopírovat</string>
+    <string name="transcribe_copied">Zkopírováno</string>
+    <string name="transcribe_next">Další</string>
+    <string name="transcribe_toast_use_share">Nahrávku pošlete přes Sdílet nebo ji vyberte v aplikaci</string>
+    <string name="transcribe_toast_busy">Už se přepisuje jiná nahrávka</string>
+    <!-- History -->
+    <string name="history_tab_dictations">Diktáty</string>
+    <string name="history_tab_log">Protokol</string>
+    <string name="history_save_title">Ukládat nahrávky a přepisy</string>
+    <string name="history_save_body">Zůstávají jen v telefonu, nejvýš posledních 300. Hodí se k opravám a později k doladění modelů (export).</string>
+    <string name="history_export_all">Exportovat vše</string>
+    <string name="history_exporting">Připravuji…</string>
+    <string name="history_export_failed">Export se nepovedl</string>
+    <string name="history_delete_all">Smazat vše</string>
+    <string name="history_delete_all_title">Smazat všechny diktáty?</string>
+    <string name="history_delete_all_body">Smaže nahrávky i přepisy. Nejde to vrátit.</string>
+    <string name="history_delete">Smazat</string>
+    <string name="history_cancel">Zrušit</string>
+    <string name="history_empty">Zatím žádné uložené diktáty.</string>
+    <string name="history_cannot_play">Nahrávku nelze přehrát</string>
+    <string name="history_play">Přehrát</string>
+    <string name="history_stop">Zastavit</string>
+    <string name="history_share">Sdílet nebo uložit</string>
+    <string name="history_copy">Kopírovat</string>
+    <string name="history_copied">Zkopírováno</string>
+    <string name="history_label_whisper">Whisper</string>
+    <string name="history_label_cleaned">Po úpravě</string>
+    <string name="history_empty_text">(prázdné)</string>
+    <string name="history_source_keyboard">Hlasová klávesnice</string>
+    <string name="history_source_floating">Plovoucí tlačítko</string>
+    <string name="history_log_refresh">Obnovit</string>
+    <string name="history_log_clear">Smazat</string>
+    <string name="history_log_empty">Protokol je prázdný.</string>
+    <!-- Start, 2nd version -->
+    <string name="start_section_keyboard">Klávesnice a hlasový vstup</string>
+    <string name="start_insertion_title">Vkládat text rovnou do pole</string>
+    <string name="start_insertion_subtitle">Teď diktát končí ve schránce. Zapněte Verbalo v Přístupnosti a text se napíše přímo do pole.</string>
+    <string name="start_keyboard_on_title">Hlasová klávesnice je zapnutá</string>
+    <string name="start_keyboard_on_subtitle">Přepnete na ni tlačítkem klávesnice v libovolném poli</string>
+    <string name="npu_unsupported_short">Tento telefon (%1$s) nemá podporovanou NPU; model potřebuje Snapdragon 8 Elite a tady nepoběží.</string>
+    <string name="npu_unsupported_long">Tento telefon (%1$s) nemá podporovanou NPU. Rozpoznávání potřebuje Snapdragon 8 Elite (třeba Galaxy S25 nebo Z Fold7); aplikace se otevře, ale přepisovat tu neumí.</string>
+    <string name="history_expand">Zobrazit vše</string>
+    <string name="history_collapse">Sbalit</string>
+</resources>

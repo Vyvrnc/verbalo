@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="policy_title">Zásady ochrany soukromí</string>
+    <string name="policy_text">Verbalo převádí řeč na text přímo v telefonu. Nemá účet, reklamy ani analytiku a váš hlas ani text nikam neposílá.\n\n• Mikrofon: jen během diktování (hlasová klávesnice, plovoucí tlačítko nebo aplikace, která chce hlasový vstup). Zvuk se zpracuje na NPU telefonu.\n• Nahrávky, které vyberete nebo pošlete přes Sdílet, se dekódují a přepíšou v telefonu.\n• Historie: se zapnutým „Ukládat nahrávky a přepisy“ zůstává posledních 300 diktátů (zvuk i text) v soukromém úložišti aplikace. Smazat nebo vypnout to jde v Historii. Soubor s exportem vznikne jen na vaši žádost a místo vybíráte vy.\n• Vkládání textu (Přístupnost): čte jen pole, do kterého diktujete, aby do něj text vložilo. Nic neukládá ani neodesílá.\n• Text jde jen tam, kam ho dáte: do pole, do kterého diktujete, nebo aplikaci, která o hlasový vstup požádala.\n• Síť: jen ke stažení modelů, když klepnete na Stáhnout. Whisper je z Qualcomm AI Hub, Gemma z Hugging Face. Jako u každého stahování tyto servery vidí vaši IP adresu.\n• Přepis může být chybný. Než se na něj spolehnete, zkontrolujte ho, a při nahrávání rozhovorů dodržujte místní zákony.\n\nNaposledy upraveno: 12. 11. 2026.</string>
+    <string name="review_title">Vítejte ve Verbalu</string>
+    <string name="review_intro">Než začnete: co aplikace dělá s vaším hlasem a pod jakou licencí je.</string>
+    <string name="review_license_heading">Licence (ISC)</string>
+    <string name="review_checkbox">Přečetl/a jsem zásady ochrany soukromí a licenci</string>
+    <string name="review_continue">Pokračovat</string>
+</resources>

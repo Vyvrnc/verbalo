@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import cz.vyvrnc.transcribronpu.llm.LlmCleaner
+import dev.soupslurpr.transcribro.R
 
 /**
  * Inserts dictated text into the focused text field of any app, at the cursor (replacing a
@@ -213,7 +214,7 @@ class TextInsertionService : AccessibilityService() {
         // Some fields (web views, custom editors) ignore SET_TEXT but accept a paste, which
         // needs the input focus (the field may have been found without it).
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Diktát", insert))
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(getString(R.string.floating_clip_label), insert))
         return node.performAction(AccessibilityNodeInfo.ACTION_PASTE).also { if (it) inserted(node) }
     }
 }

@@ -15,7 +15,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.soupslurpr.transcribro.preferences.PreferencesViewModel
 import dev.soupslurpr.transcribro.ui.ReviewPrivacyPolicyAndLicense
-import dev.soupslurpr.transcribro.ui.theme.TranscribroTheme
+import dev.soupslurpr.transcribro.ui.theme.VerbaloTheme
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "preferences")
 
@@ -31,7 +31,7 @@ open class MainActivity : ComponentActivity() {
 
             val preferencesUiState by preferencesViewModel.uiState.collectAsState()
 
-            TranscribroTheme(
+            VerbaloTheme(
                 preferencesViewModel = preferencesViewModel
             ) {
                 if (!preferencesUiState.acceptedPrivacyPolicyAndLicense.second.value) {

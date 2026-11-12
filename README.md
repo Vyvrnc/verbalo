@@ -1,99 +1,68 @@
-# Transcribro NPU (fork)
+<p align="center">
+  <img src="brand/verbalo-hero.png" alt="Verbalo: a teal parrot on a phone whose words turn into lines of text" width="720">
+</p>
 
-Private fork of [soupslurpr/Transcribro](https://github.com/soupslurpr/Transcribro) (ISC). Speech
-recognition runs on the Hexagon NPU of Snapdragon 8 Elite phones (SM8750, Galaxy Z Fold 7):
-Whisper large-v3-turbo float16 from Qualcomm AI Hub through QNN HTP. The engine comes from
-[WhisperBench](https://github.com/Vyvrnc/WhisperBench) (`app/src/main/cpp/npu_whisper.cpp`).
+# Verbalo
 
-Changes against upstream:
-- whisper.cpp tiny.en (English only, CPU) is gone; `cz.vyvrnc.transcribronpu.npu.NpuEngine` transcribes.
-- Language from `RecognizerIntent.EXTRA_LANGUAGE`, Czech otherwise.
-- The model (2.0 GB) is downloaded in the app (Settings -> NPU model) straight from Qualcomm. Neither
-  the model nor the QNN libraries are open source (Qualcomm licences), so this is for private use.
-- The model stays loaded between dictations and is released after 10 idle minutes.
-- Segments are joined with a space (upstream joined them with ", ").
-- Settings -> recognition: language (from the calling app, a fixed one or auto-detect), a vocabulary
-  fed to Whisper as a prompt (`<|startofprev|>`), and a replacement dictionary ("heard => written").
-- Dictation longer than 30 s is cut at the quietest moment before each window ends.
-- Live preview: the voice keyboard shows unfinished text (composing text) while you speak.
-- Floating dictation button over all apps (overlay + microphone foreground service, started from the
-  settings). An optional accessibility service puts the text into the focused field; without it the
-  text goes to the clipboard.
-- Optional on-device cleanup of the floating button's dictation with Gemma 4 E2B (LiteRT-LM, GPU,
-  Apache 2.0, 2.6 GB downloaded in the app). A single switch: the model fixes recognition errors,
-  punctuation and self-corrections and picks the form itself (list, e-mail, chat message) from the
-  content and the app the text goes into.
-- History of dictations (recording, Whisper text, cleaned text) with playback and zip export, and an
-  in-app event log. Spoken commands: "lomeno" (/), "nový řádek", "nový odstavec", "dvojtečka",
-  "středník", brackets.
-- The cleanup instructions (prompt) can be edited in the app; vocabulary, replacements and the prompt
-  can be exported and imported as a JSON file.
-- Cleanup per app: each app can be set to cleanup or raw transcript, the rest follows the switch.
-  The raw transcript is inserted while speaking, without waiting for Gemma (needs the
-  accessibility service, which tells the target app). The rules are part of the JSON export.
-- Transcription of a recording ("Přepsat nahrávku" on the start screen, or Share from another app):
-  any format the phone decodes (m4a, mp3, ogg/opus voice messages, wav, flac, amr, video), streamed
-  to 16 kHz and transcribed one 30 s window at a time in a foreground service, with progress, copy
-  and share. Near-silent windows are skipped, quiet ones amplified.
-- The floating button follows Auto-Stop Recognition and Auto-Send Transcription.
-- Experimental: Gemma on the NPU (the SM8750 build, 3.0 GB) instead of the GPU.
-- Model downloads run in a foreground service, so they continue in the background.
+**Speech to text, on your phone.** Verbalo runs OpenAI's Whisper (large-v3-turbo) on the
+phone's NPU. Nothing is sent anywhere: no account, no ads, no analytics.
 
-Measured on a Galaxy Z Fold 7: model load 3.4 s once, then 7.2 s of Czech speech in 0.87 s and
-1.8 s in 0.62 s (the encoder always processes a full 30 s window).
+It started as a fork of [Transcribro](https://github.com/soupslurpr/Transcribro) by soupslurpr
+and has since become its own app: a new engine, new features and a new look.
 
-Build: `bash tools/build-apk.sh` (Docker, image derived from WhisperBench's); the APK and the
-signing key live outside the repo.
+## What it does
+- **Floating button**: a microphone over every app. Tap it to dictate, tap again to stop, and
+  the text is typed into the field you are in (or copied to the clipboard).
+- **Voice keyboard**: switch to Verbalo from any keyboard and dictate, with a live preview
+  while you speak.
+- **Transcribe a recording**: a voice message, a recorded call or a video, picked in the app
+  or shared from Telegram, WhatsApp and others. Long recordings are cut at pauses and transcribed
+  one window at a time.
+- **Calls split by speaker**: a stereo call recording (your microphone left, the other side
+  right) comes out as a dialogue, `[03:12] Me: …` / `[03:20] Other side: …`, each turn transcribed
+  from its own channel.
+- **Optional cleanup** with Gemma 4 E2B, also on the phone: fixes misheard words, punctuation and
+  self-corrections, and shapes the text for the app it goes into (a list, an e-mail, a chat
+  message). Per-app rules and an editable prompt.
+- **Vocabulary and replacements**: names and terms the model should prefer, and fixes for words
+  it hears wrong. Exported and imported as JSON.
+- **History**: recordings and transcripts, kept on the phone, with playback; share any of them
+  as text, `.md` or `.txt`.
+- English and Czech UI. Czech is the default recognition language; others can be chosen.
 
----
+## Requirements
+- A phone with a **Snapdragon 8 Elite (SM8750)**, for example Galaxy S25, S25 Ultra or
+  Z Fold7. The Whisper model is compiled for its Hexagon NPU and does not run on other chips;
+  on other phones the app opens and says so.
+- Android 12 or newer and about 2.5 GB of free space for the Whisper model (another 2.6 GB for
+  the optional Gemma cleanup).
 
-# Transcribro
+## Install
+1. Download the APK from [Releases](../../releases) and install it.
+2. Open Verbalo → Settings → **NPU model** and download it (2.0 GB, straight from Qualcomm
+   AI Hub; Wi-Fi recommended).
+3. On the home screen, turn on the **floating button**. To type straight into fields, turn on
+   Verbalo in Settings → Accessibility; without it the text goes to the clipboard.
 
-Transcribro is a private and on-device speech recognition keyboard and service for Android.\
-It uses whisper.cpp to run the OpenAI Whisper family of models and Silero VAD for voice activity detection.\
-It features a voice input keyboard, enabling you to type with speech.\
-It can also be used by other apps either explicitly or when set as the user-selected speech to text app which some apps
-may use for speech to text.
+## Privacy
+Audio is processed on the phone. The network is used only to download the models when you tap
+Download (Whisper from Qualcomm AI Hub, Gemma from Hugging Face). The full policy is shown on
+first start and in Settings.
 
-## Language support
+## Build
+```bash
+bash tools/build-apk.sh          # Docker; writes a signed APK outside the repo
+```
+The signing key is generated on the first run outside the repository and is never committed.
+Design rules: [docs/design-language.md](docs/design-language.md).
 
-Transcribro currently only supports English. However, supporting other languages is planned and tracked in https://github.com/soupslurpr/Transcribro/issues/18.
-
-## Download
-
-Transcribro is available on the [Accrescent](https://accrescent.app) app store and GitHub releases.\
-[Accrescent](https://accrescent.app) is the recommended way to get Transcribro as it is more secure
-than GitHub releases.\
-Click on the badge below to get it on [Accrescent](https://accrescent.app).
-
-<a href="https://accrescent.app/app/dev.soupslurpr.transcribro">
-    <img alt="Get it on Accrescent" src="https://accrescent.app/badges/get-it-on.png" height="80">
-</a>
-
-The package name and SHA-256 hash of the signing certificate is below, so if you are downloading the APK, you can
-verify Transcribro with [`apksigner`](https://developer.android.com/studio/command-line/apksigner#usage-verify)
-using `apksigner verify --print-certs Transcribro-X.Y.Z.apk` and/or
-[AppVerifier](https://github.com/soupslurpr/AppVerifier).
-If you are downloading from [Accrescent](https://accrescent.app) then you should verify
-[Accrescent](https://accrescent.app) itself [here](https://accrescent.app/faq#verifying).
-
-dev.soupslurpr.transcribro\
-7D:BC:FB:FA:A1:35:B4:4E:6E:93:91:02:25:DC:B1:4E:05:82:91:DA:8C:2D:36:22:73:49:49:B7:1A:B3:BE:64
-
-It can also be found on a [Bluesky post](https://bsky.app/profile/soupslurpr.dev/post/3kopox4ffl72t)
-to distrust the website.
-It is encouraged to verify it's the same with other people as well for assurance.
-
-## Community
-
-Join the Matrix space at https://matrix.to/#/#transcribro:matrix.org for the General, Announcements, and
-Testing rooms.
-
-## Contributing
-
-Check [CONTRIBUTING.md](https://github.com/soupslurpr/Transcribro/blob/master/CONTRIBUTING.md) for things to know
-if you want to contribute.
-
-## Screenshots
-
-<img src="/Screenshot_20250214-223133.png" alt="Screenshot of the keyboard UI, focused on the search bar of Vanadium's incognito tab." width="250">
+## Credits and licenses
+- Verbalo: [ISC](LICENSE.txt), © 2024–2025 soupslurpr (Transcribro), © 2026 Vyvrnc.
+- [OpenAI Whisper](LICENSE.openai-whisper.txt) (MIT). The NPU build of large-v3-turbo comes
+  from Qualcomm AI Hub and is downloaded in the app.
+- Qualcomm QNN runtime (`com.qualcomm.qti:qnn-runtime`), shipped inside the app as its license
+  allows; its NOTICE and license are in the APK under `assets/qnn/`.
+- [Silero VAD](LICENSE.silero-vad.txt) (MIT), [whisper.cpp](LICENSE.whisper.cpp.txt) (MIT),
+  Gemma 4 E2B through LiteRT-LM (Apache 2.0, downloaded in the app).
+- Fonts: [Inter](LICENSE.inter.txt) and [JetBrains Mono](LICENSE.jetbrains-mono.txt)
+  (SIL OFL 1.1).

@@ -1,5 +1,8 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.clickable
@@ -29,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import dev.soupslurpr.transcribro.R
 import cz.vyvrnc.transcribronpu.download.ModelDownloadService
 import cz.vyvrnc.transcribronpu.llm.LlmModel
 import cz.vyvrnc.transcribronpu.npu.NpuSettings
@@ -50,33 +55,28 @@ fun CleanupSettings() {
     var appRules by remember { mutableStateOf(NpuSettings.cleanupApps(context)) }
     var appsDialog by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (model == LlmModel.NPU) {
             ModelDownloadItem(
                 model = download,
-                headline = "Model pro úpravu textu (Gemma 4 E2B, NPU)",
-                readyText = "Staženo a ověřeno (SHA-256). ${model.label}, licence Apache 2.0.",
-                idleText = "Není stažený. Klepnutím stáhnete 3,0 GB z Hugging Face (litert-community), " +
-                    "doporučeno přes Wi-Fi. Stahuje se i na pozadí, běží jen v telefonu.",
+                headline = stringResource(R.string.cleanup_model_title_npu),
+                readyText = stringResource(R.string.cleanup_model_ready, model.label(context)),
+                idleText = stringResource(R.string.cleanup_model_idle_npu),
             )
         } else {
             ModelDownloadItem(
                 model = download,
-                headline = "Model pro úpravu textu (Gemma 4 E2B)",
-                readyText = "Staženo a ověřeno (SHA-256). ${model.label}, licence Apache 2.0.",
-                idleText = "Není stažený. Klepnutím stáhnete 2,6 GB z Hugging Face (litert-community), " +
-                    "doporučeno přes Wi-Fi. Stahuje se i na pozadí, běží jen v telefonu.",
+                headline = stringResource(R.string.cleanup_model_title),
+                readyText = stringResource(R.string.cleanup_model_ready, model.label(context)),
+                idleText = stringResource(R.string.cleanup_model_idle),
             )
         }
         SettingsSwitchItem(
-            name = "Úprava diktátu",
+            name = stringResource(R.string.cleanup_switch_title),
             description = when {
-                !enabled -> "Text z plovoucího tlačítka se vkládá tak, jak ho Whisper přepsal " +
-                    "(kromě aplikací, kde je úprava zapnutá níže)."
-                !ready -> "Bez staženého modelu se text vloží neupravený."
-                else -> "Opraví chyby přepisu, interpunkci a přeřeky. Výčet převede na odrážky, " +
-                    "v e-mailu udělá odstavce – podle obsahu a aplikace, do které píšete. " +
-                    "Text se vloží pár sekund po konci diktátu."
+                !enabled -> stringResource(R.string.cleanup_switch_off)
+                !ready -> stringResource(R.string.cleanup_switch_no_model)
+                else -> stringResource(R.string.cleanup_switch_on)
             },
             checked = enabled,
             onCheckedChange = {
@@ -84,44 +84,38 @@ fun CleanupSettings() {
                 NpuSettings.setCleanup(context, it)
             },
         )
-        ListItem(
-            modifier = Modifier.clickable {
+        val cleanupLabel = stringResource(R.string.cleanup_rule_cleanup)
+        val rawLabel = stringResource(R.string.cleanup_rule_raw)
+        SettingsIconItem(
+            name = stringResource(R.string.cleanup_per_app_title),
+            description = if (appRules.isEmpty()) {
+                stringResource(R.string.cleanup_per_app_description)
+            } else {
+                appRules.entries
+                    .map { (pkg, on) -> appLabel(context, pkg) to on }
+                    .sortedBy { it.first.lowercase() }
+                    .joinToString(" · ") { (label, on) -> "$label: ${if (on) cleanupLabel else rawLabel}" }
+            },
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            onClick = {
                 appRules = NpuSettings.cleanupApps(context)
                 appsDialog = true
             },
-            headlineContent = { Text("Podle aplikace", fontWeight = FontWeight.SemiBold) },
-            supportingContent = {
-                Text(
-                    if (appRules.isEmpty()) {
-                        "Všude stejně. Klepnutím nastavíte aplikace, kde chcete jen přepis (třeba chat " +
-                            "s AI), nebo naopak úpravu."
-                    } else {
-                        appRules.entries
-                            .map { (pkg, on) -> appLabel(context, pkg) to on }
-                            .sortedBy { it.first.lowercase() }
-                            .joinToString(" · ") { (label, on) -> "$label: ${if (on) "úprava" else "jen přepis"}" }
-                    }
-                )
-            },
         )
-        ListItem(
-            modifier = Modifier.clickable {
+        SettingsIconItem(
+            name = stringResource(R.string.cleanup_prompt_title),
+            description = if (customPrompt == null) stringResource(R.string.cleanup_prompt_default)
+                else stringResource(R.string.cleanup_prompt_custom, customPrompt!!.length),
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            onClick = {
                 // Re-read: an import may have replaced the prompt since this screen opened.
                 customPrompt = NpuSettings.cleanupPrompt(context)
                 promptDialog = true
             },
-            headlineContent = { Text("Pokyny pro úpravu textu", fontWeight = FontWeight.SemiBold) },
-            supportingContent = {
-                Text(
-                    if (customPrompt == null) "Výchozí. Klepnutím je upravíte (styl, oslovení, co měnit a co ne)."
-                    else "Vlastní (${customPrompt!!.length} znaků). Klepnutím upravíte nebo vrátíte výchozí."
-                )
-            },
         )
         SettingsSwitchItem(
-            name = "Gemma na NPU (zkušební)",
-            description = "Varianta pro Snapdragon 8 Elite (3,0 GB, stahuje se zvlášť). Měla by být rychlejší " +
-                "a šetrnější k baterii než GPU. Když na NPU selže, vloží se text neupravený.",
+            name = stringResource(R.string.cleanup_npu_title),
+            description = stringResource(R.string.cleanup_npu_description),
             checked = model == LlmModel.NPU,
             onCheckedChange = {
                 model = if (it) LlmModel.NPU else LlmModel.GPU
@@ -190,21 +184,20 @@ private fun AppRulesDialog(defaultOn: Boolean, onChanged: (Map<String, Boolean>)
         value = withContext(Dispatchers.IO) { launcherApps(context, pinned) }
     }
     var query by remember { mutableStateOf("") }
-    val defaultText = if (defaultOn) "výchozí (úprava)" else "výchozí (jen přepis)"
+    val defaultText = stringResource(if (defaultOn) R.string.cleanup_rule_default_cleanup else R.string.cleanup_rule_default_raw)
+    val cleanupLabel = stringResource(R.string.cleanup_rule_cleanup)
+    val rawLabel = stringResource(R.string.cleanup_rule_raw)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Úprava podle aplikace") },
+        title = { Text(stringResource(R.string.cleanup_apps_dialog_title)) },
         text = {
             Column {
-                Text(
-                    "Klepnutím přepínáte: výchozí → úprava → jen přepis. Jen přepis se vkládá už během " +
-                        "mluvení, bez čekání na Gemmu. Aplikaci pozná jen zapnuté vkládání do pole.",
-                )
+                Text(stringResource(R.string.cleanup_apps_dialog_hint))
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Hledat aplikaci") },
+                    placeholder = { Text(stringResource(R.string.cleanup_apps_search)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -212,7 +205,7 @@ private fun AppRulesDialog(defaultOn: Boolean, onChanged: (Map<String, Boolean>)
                 )
                 val list = apps
                 if (list == null) {
-                    Text("Načítám aplikace…", Modifier.padding(top = 12.dp))
+                    Text(stringResource(R.string.cleanup_apps_loading), Modifier.padding(top = 12.dp))
                 } else {
                     val shown = list
                         .filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
@@ -241,8 +234,8 @@ private fun AppRulesDialog(defaultOn: Boolean, onChanged: (Map<String, Boolean>)
                                     Text(
                                         when (rule) {
                                             null -> defaultText
-                                            true -> "úprava"
-                                            false -> "jen přepis"
+                                            true -> cleanupLabel
+                                            false -> rawLabel
                                         },
                                         fontWeight = if (rule != null) FontWeight.SemiBold else null,
                                     )
@@ -253,7 +246,7 @@ private fun AppRulesDialog(defaultOn: Boolean, onChanged: (Map<String, Boolean>)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Hotovo") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_done)) } },
     )
 }
 
@@ -262,13 +255,10 @@ private fun PromptDialog(initial: String, onDismiss: () -> Unit, onSave: (String
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Pokyny pro úpravu textu") },
+        title = { Text(stringResource(R.string.cleanup_prompt_title)) },
         text = {
             Column {
-                Text(
-                    "Systémový prompt pro Gemmu. Diktát dostane mezi značkami <dictation>, cílovou aplikaci " +
-                        "a text před kurzorem nad nimi. Příklady v pokynech pomáhají malému modelu nejvíc.",
-                )
+                Text(stringResource(R.string.cleanup_prompt_dialog_hint))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -279,11 +269,11 @@ private fun PromptDialog(initial: String, onDismiss: () -> Unit, onSave: (String
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Uložit") } },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text(stringResource(R.string.settings_save)) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onReset) { Text("Výchozí") }
-                TextButton(onClick = onDismiss) { Text("Zrušit") }
+                TextButton(onClick = onReset) { Text(stringResource(R.string.cleanup_prompt_reset)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) }
             }
         },
     )

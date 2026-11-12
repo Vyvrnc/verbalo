@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Screen texts (English, default). Czech in values-cs/strings_ui.xml, same keys. -->
+<resources>
+    <!-- Start -->
+    <string name="start_tagline">Speech to text, on your phone</string>
+    <string name="start_section_transcribe">Transcribe</string>
+    <string name="start_file_title">Transcribe a recording</string>
+    <string name="start_file_subtitle">A voice message, a recorded call or a video. Also from Share in other apps.</string>
+    <string name="start_mic_title">Allow the microphone</string>
+    <string name="start_mic_subtitle">Needed for dictation. Choose "While using the app".</string>
+    <string name="start_keyboard_title">Turn on the voice keyboard</string>
+    <string name="start_keyboard_subtitle">In system settings, under On-screen keyboard</string>
+    <!-- Settings -->
+    <string name="settings_section_recognition">Speech recognition (NPU)</string>
+    <string name="settings_section_floating">Floating dictation</string>
+    <!-- Transcribe a recording -->
+    <string name="transcribe_title">Transcribe a recording</string>
+    <string name="transcribe_idle_heading">A file, or Share from another app</string>
+    <string name="transcribe_idle_body">Pick a recording, or send one to Verbalo with Share, for example a voice message from Telegram. It is transcribed on the phone’s NPU and nothing is sent. Language and vocabulary follow the settings. Stereo calls from the phone are split into Me and Other side.</string>
+    <string name="transcribe_pick">Choose a recording</string>
+    <string name="transcribe_pick_other">Choose another recording</string>
+    <string name="transcribe_loading">Loading %1$s…</string>
+    <string name="transcribe_progress">%1$s of audio · %2$d %%</string>
+    <string name="transcribe_cancel">Cancel</string>
+    <string name="transcribe_done">%1$s · %2$s of audio transcribed in %3$s</string>
+    <string name="transcribe_failed_windows">%1$d part(s) could not be transcribed; they are marked in the text.</string>
+    <string name="transcribe_share">Share or save</string>
+    <string name="transcribe_copy">Copy</string>
+    <string name="transcribe_copied">Copied</string>
+    <string name="transcribe_next">Next</string>
+    <string name="transcribe_toast_use_share">Send the recording with Share, or choose it in the app</string>
+    <string name="transcribe_toast_busy">Another recording is being transcribed</string>
+    <!-- History -->
+    <string name="history_tab_dictations">Dictations</string>
+    <string name="history_tab_log">Log</string>
+    <string name="history_save_title">Keep recordings and transcripts</string>
+    <string name="history_save_body">Only on this phone, the last 300 at most. Useful for corrections and, later, for tuning the models (export).</string>
+    <string name="history_export_all">Export all</string>
+    <string name="history_exporting">Preparing…</string>
+    <string name="history_export_failed">The export failed</string>
+    <string name="history_delete_all">Delete all</string>
+    <string name="history_delete_all_title">Delete all dictations?</string>
+    <string name="history_delete_all_body">Deletes the recordings and the transcripts. This cannot be undone.</string>
+    <string name="history_delete">Delete</string>
+    <string name="history_cancel">Cancel</string>
+    <string name="history_empty">No saved dictations yet.</string>
+    <string name="history_cannot_play">The recording cannot be played</string>
+    <string name="history_play">Play</string>
+    <string name="history_stop">Stop</string>
+    <string name="history_share">Share or save</string>
+    <string name="history_copy">Copy</string>
+    <string name="history_copied">Copied</string>
+    <string name="history_label_whisper">Whisper</string>
+    <string name="history_label_cleaned">Cleaned up</string>
+    <string name="history_empty_text">(empty)</string>
+    <string name="history_source_keyboard">Voice keyboard</string>
+    <string name="history_source_floating">Floating button</string>
+    <string name="history_log_refresh">Refresh</string>
+    <string name="history_log_clear">Clear</string>
+    <string name="history_log_empty">The log is empty.</string>
+    <!-- Start, 2nd version -->
+    <string name="start_section_keyboard">Keyboard and voice input</string>
+    <string name="start_insertion_title">Insert the text into the field</string>
+    <string name="start_insertion_subtitle">Now the dictation goes to the clipboard. Turn on Verbalo in Accessibility to type it straight into the field.</string>
+    <string name="start_keyboard_on_title">Voice keyboard is on</string>
+    <string name="start_keyboard_on_subtitle">Switch to it with the keyboard button in any text field</string>
+    <string name="npu_unsupported_short">This phone (%1$s) has no supported NPU; the model needs a Snapdragon 8 Elite and will not run here.</string>
+    <string name="npu_unsupported_long">This phone (%1$s) has no supported NPU. Recognition needs a Snapdragon 8 Elite (for example Galaxy S25 or Z Fold7); the app opens, but it cannot transcribe here.</string>
+    <string name="history_expand">Show all</string>
+    <string name="history_collapse">Collapse</string>
+</resources>

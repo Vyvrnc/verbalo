@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="policy_title">Privacy policy</string>
+    <string name="policy_text">Verbalo turns speech into text on your phone. It has no account, no ads and no analytics, and it does not send your voice or your text anywhere.\n\n• Microphone: used only while you dictate (the voice keyboard, the floating button, or an app that asks for voice input). The audio is processed on the phone’s NPU.\n• Recordings you pick or share with Verbalo are decoded and transcribed on the phone.\n• History: with “Keep recordings and transcripts” on, the last 300 dictations (audio and text) are kept in the app’s private storage. You can delete them or turn this off in History. An export file is made only when you ask, and you choose where it goes.\n• Text insertion (Accessibility): reads only the text field you dictate into, to put the text there. It stores and sends nothing.\n• Your text goes only where you put it: into the field you dictate into, or to the app that asked for voice input.\n• Network: used only to download the models when you tap Download. Whisper comes from Qualcomm AI Hub, Gemma from Hugging Face. Like any download, those servers see your IP address.\n• Transcripts can be wrong. Check them before you rely on them, and follow local law when you record a conversation.\n\nLast updated: 12 November 2026.</string>
+    <string name="review_title">Welcome to Verbalo</string>
+    <string name="review_intro">Before you start: what the app does with your voice, and its license.</string>
+    <string name="review_license_heading">License (ISC)</string>
+    <string name="review_checkbox">I have read the privacy policy and the license</string>
+    <string name="review_continue">Continue</string>
+</resources>

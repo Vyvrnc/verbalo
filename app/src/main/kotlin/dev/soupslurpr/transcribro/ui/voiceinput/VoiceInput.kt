@@ -74,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -93,7 +94,7 @@ import dev.soupslurpr.transcribro.preferences.PreferencesViewModel
 import dev.soupslurpr.transcribro.recognitionservice.MainRecognitionService
 import dev.soupslurpr.transcribro.ui.reusablecomposables.ScreenLazyColumn
 import dev.soupslurpr.transcribro.ui.reusablecomposables.longPressableKey
-import dev.soupslurpr.transcribro.ui.theme.TranscribroTheme
+import dev.soupslurpr.transcribro.ui.theme.VerbaloTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -175,7 +176,7 @@ class VoiceInput : InputMethodService() {
                 LocalConfiguration.current.screenHeightDp.dp * 0.65f
             }
 
-            TranscribroTheme(preferencesViewModel = preferencesViewModel) {
+            VerbaloTheme(preferencesViewModel = preferencesViewModel) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -194,7 +195,7 @@ class VoiceInput : InputMethodService() {
                             if (!acceptedPrivacyPolicyAndLicense) {
                                 ScreenLazyColumn {
                                     item {
-                                        Text("Please accept the privacy policy and license first!")
+                                        Text(stringResource(R.string.keyboard_accept_policy))
                                     }
                                     item {
                                         Button(
@@ -202,17 +203,14 @@ class VoiceInput : InputMethodService() {
                                                 startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName))
                                             }
                                         ) {
-                                            Text("Open Transcribro")
+                                            Text(stringResource(R.string.keyboard_open_app, stringResource(R.string.app_name)))
                                         }
                                     }
                                 }
                             } else if (showInsufficientPermissionsError) {
                                 ScreenLazyColumn {
                                     item {
-                                        Text(
-                                            "Please grant \"Allow only while using the app\" microphone permission in " +
-                                                    "settings to continue."
-                                        )
+                                        Text(stringResource(R.string.keyboard_mic_permission))
                                     }
                                     item {
                                         Button(
@@ -231,7 +229,7 @@ class VoiceInput : InputMethodService() {
                                                 showInsufficientPermissionsError = false
                                             }
                                         ) {
-                                            Text("Open App Settings")
+                                            Text(stringResource(R.string.keyboard_open_app_settings))
                                         }
                                     }
                                 }
@@ -279,7 +277,7 @@ class VoiceInput : InputMethodService() {
 
                                                         SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_CLIENT -> {
                                                             cancelSnackbarJobAndLaunch(
-                                                                "Recognition is finishing, please wait or cancel.",
+                                                                getString(R.string.recognize_busy_snackbar),
                                                                 withDismissAction = true,
                                                                 duration = SnackbarDuration.Short
                                                             )
@@ -507,7 +505,7 @@ class VoiceInput : InputMethodService() {
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.Filled.Settings,
-                                                            contentDescription = "open Transcribro's settings"
+                                                            contentDescription = stringResource(R.string.keyboard_open_settings_description, stringResource(R.string.app_name))
                                                         )
                                                     }
                                                     Spacer(modifier = Modifier.size(8.dp))
@@ -526,7 +524,7 @@ class VoiceInput : InputMethodService() {
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.Filled.Keyboard,
-                                                            contentDescription = "Cancel recognition and switch to the previous input method"
+                                                            contentDescription = stringResource(R.string.keyboard_switch_input_description)
                                                         )
                                                     }
                                                 }
@@ -546,9 +544,7 @@ class VoiceInput : InputMethodService() {
                                                     enabled = isRecognizing,
                                                     shape = RoundedCornerShape(10.dp)
                                                 ) {
-                                                    Text(
-                                                        "Cancel Recognition"
-                                                    )
+                                                    Text(stringResource(R.string.keyboard_cancel_recognition))
                                                 }
                                             }
                                             FilledIconToggleButton(
@@ -574,9 +570,9 @@ class VoiceInput : InputMethodService() {
                                                 Icon(
                                                     imageVector = Icons.Outlined.Mic,
                                                     contentDescription = if (isRecognizing) {
-                                                        "Speech recognition active"
+                                                        stringResource(R.string.recognize_active_description)
                                                     } else {
-                                                        "Speech recognition inactive"
+                                                        stringResource(R.string.recognize_inactive_description)
                                                     },
                                                     modifier = Modifier.size(165.dp)
                                                 )
@@ -623,7 +619,7 @@ class VoiceInput : InputMethodService() {
                                                         .weight(1f),
                                                     shape = RoundedCornerShape(10.dp)
                                                 ) {
-                                                    Text("Clear Unselected")
+                                                    Text(stringResource(R.string.keyboard_clear_unselected))
                                                 }
                                                 Spacer(modifier = Modifier.size(8.dp))
                                                 Row(
@@ -701,7 +697,7 @@ class VoiceInput : InputMethodService() {
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.AutoMirrored.Outlined.Undo,
-                                                            contentDescription = "Undo",
+                                                            contentDescription = stringResource(R.string.keyboard_undo),
                                                             modifier = Modifier.fillMaxSize(0.5f)
                                                         )
                                                     }
@@ -778,7 +774,7 @@ class VoiceInput : InputMethodService() {
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.AutoMirrored.Outlined.Redo,
-                                                            contentDescription = "Redo",
+                                                            contentDescription = stringResource(R.string.keyboard_redo),
                                                             modifier = Modifier.fillMaxSize(0.5f)
                                                         )
                                                     }
@@ -827,7 +823,7 @@ class VoiceInput : InputMethodService() {
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.AutoMirrored.Outlined.Backspace,
-                                                        contentDescription = "Backspace",
+                                                        contentDescription = stringResource(R.string.keyboard_backspace),
                                                         modifier = Modifier.fillMaxSize(0.5f)
                                                     )
                                                 }
@@ -840,41 +836,42 @@ class VoiceInput : InputMethodService() {
                                                         .fillMaxWidth()
                                                         .weight(1f),
                                                 ) {
+                                                    val sendLabel = stringResource(R.string.keyboard_action_send)
                                                     // TODO: why is the actionId seemingly always 0???
                                                     val (actionKeyIcon, actionKeyContentDescription) = when (currentInputEditorInfo.actionId) {
                                                         EditorInfo.IME_ACTION_NEXT -> Pair(
                                                             Icons.AutoMirrored.Outlined.NavigateNext,
-                                                            "Next"
+                                                            stringResource(R.string.keyboard_action_next)
                                                         )
 
                                                         EditorInfo.IME_ACTION_GO -> Pair(
                                                             Icons.AutoMirrored.Outlined.ArrowRightAlt,
-                                                            "Go"
+                                                            stringResource(R.string.keyboard_action_go)
                                                         )
 
                                                         EditorInfo.IME_ACTION_SEND -> Pair(
                                                             Icons.AutoMirrored.Outlined.Send,
-                                                            "Send"
+                                                            sendLabel
                                                         )
 
-                                                        EditorInfo.IME_ACTION_DONE -> Pair(Icons.Outlined.Done, "Done")
-                                                        EditorInfo.IME_ACTION_NONE -> Pair(Icons.Outlined.Block, "None")
+                                                        EditorInfo.IME_ACTION_DONE -> Pair(Icons.Outlined.Done, stringResource(R.string.keyboard_action_done))
+                                                        EditorInfo.IME_ACTION_NONE -> Pair(Icons.Outlined.Block, stringResource(R.string.keyboard_action_none))
                                                         EditorInfo.IME_ACTION_PREVIOUS -> Pair(
                                                             Icons.AutoMirrored.Outlined.NavigateBefore,
-                                                            "Previous"
+                                                            stringResource(R.string.keyboard_action_previous)
                                                         )
 
                                                         EditorInfo.IME_ACTION_SEARCH -> Pair(
                                                             Icons.Outlined.Search,
-                                                            "Search"
+                                                            stringResource(R.string.keyboard_action_search)
                                                         )
 
-                                                        else -> Pair(Icons.AutoMirrored.Outlined.Send, "Send")
+                                                        else -> Pair(Icons.AutoMirrored.Outlined.Send, sendLabel)
                                                     }
 
                                                     FilledTonalIconButton(
                                                         onClick = {
-                                                            if (actionKeyContentDescription == "Send") {
+                                                            if (actionKeyContentDescription == sendLabel) {
                                                                 currentInputConnection.performEditorAction(EditorInfo.IME_ACTION_SEND)
                                                             } else {
                                                                 currentInputConnection.performEditorAction(
@@ -920,7 +917,7 @@ class VoiceInput : InputMethodService() {
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.AutoMirrored.Outlined.KeyboardReturn,
-                                                            contentDescription = "Return",
+                                                            contentDescription = stringResource(R.string.keyboard_return),
                                                             modifier = Modifier.fillMaxSize(0.5f)
                                                         )
                                                     }

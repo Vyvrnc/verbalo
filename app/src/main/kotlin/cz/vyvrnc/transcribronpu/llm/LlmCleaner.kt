@@ -106,9 +106,9 @@ object LlmCleaner {
             "\"Zkoušel jsem to na třech zařízeních a všude to šlo.\"\n" +
             "\"Takže ehm potřebuju koupit mléko, chleba, no a taky vejce a máslo.\" -> " +
             "\"Potřebuju koupit:\n- mléko\n- chleba\n- vejce\n- máslo\"\n" +
-            "\"Dobrý den, posílám vám tu nabídku, kterou jsme řešili. Kdyby něco, ozvěte se. S pozdravem Matěj\" " +
+            "\"Dobrý den, posílám vám tu nabídku, kterou jsme řešili. Kdyby něco, ozvěte se. S pozdravem Jana\" " +
             "(e-mail) -> \"Dobrý den,\n\nposílám Vám nabídku, kterou jsme řešili. Kdyby něco, ozvěte se.\n\n" +
-            "S pozdravem\nMatěj\"\n" +
+            "S pozdravem\nJana\"\n" +
             "\"Jo, v pohodě, dorazím tak v šest, teda v půl sedmé.\" (chat) -> \"Jo, v pohodě, dorazím v půl sedmé.\""
 
     private fun message(text: String, target: Target?): String = buildString {

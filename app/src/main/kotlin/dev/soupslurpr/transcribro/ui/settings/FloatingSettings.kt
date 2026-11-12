@@ -8,11 +8,12 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -23,16 +24,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
+import dev.soupslurpr.transcribro.R
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import cz.vyvrnc.transcribronpu.floating.FloatingDictationService
 import cz.vyvrnc.transcribronpu.floating.TextInsertionService
 
-/** Floating dictation button: switch, overlay/microphone permissions, text insertion. */
+/** What the floating button needs and does; shared by Settings and the start screen. */
+class FloatingController(
+    val running: Boolean,
+    val overlay: Boolean,
+    val mic: Boolean,
+    val insertion: Boolean,
+    /** Turns the button on (asking for whatever is missing first) or off. */
+    val toggle: (Boolean) -> Unit,
+)
+
 @Composable
-fun FloatingSettings() {
+fun rememberFloatingController(): FloatingController {
     val context = LocalContext.current
     val running by FloatingDictationService.running.collectAsState()
     // Bumped on resume: permissions are granted in system screens outside the app.
@@ -56,41 +67,45 @@ fun FloatingSettings() {
         refresh++
         if (granted && Settings.canDrawOverlays(context)) startWithNotifications(context, notificationPermission::launch)
     }
+    return FloatingController(running, overlay, mic, insertion) { on ->
+        when {
+            !on -> FloatingDictationService.stop(context)
+            !overlay -> context.startActivity(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+            )
+            !mic -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            else -> startWithNotifications(context, notificationPermission::launch)
+        }
+    }
+}
 
-    Column(Modifier.fillMaxWidth()) {
+/** One line on what the button does now, or what it still needs. */
+@Composable
+fun floatingStatus(c: FloatingController): String = when {
+    !c.overlay -> stringResource(R.string.floating_settings_need_overlay)
+    !c.mic -> stringResource(R.string.floating_settings_need_mic)
+    c.running -> stringResource(R.string.floating_settings_running)
+    else -> stringResource(R.string.floating_settings_idle)
+}
+
+/** Floating dictation button: switch, overlay/microphone permissions, text insertion. */
+@Composable
+fun FloatingSettings() {
+    val context = LocalContext.current
+    val c = rememberFloatingController()
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsSwitchItem(
-            name = "Plovoucí tlačítko",
-            description = when {
-                !overlay -> "Tlačítko pro diktování nad všemi aplikacemi. Nejdřív povolte „Zobrazovat přes ostatní aplikace“ (klepnutím)."
-                !mic -> "Tlačítko pro diktování nad všemi aplikacemi. Potřebuje přístup k mikrofonu."
-                running -> "Zapnuto. Klepnutí na tlačítko spustí diktování, další klepnutí ho ukončí; tažením ho přesunete. " +
-                    "Po restartu telefonu ho zapněte znovu tady."
-                else -> "Tlačítko pro diktování nad všemi aplikacemi, bez přepínání klávesnice."
-            },
-            checked = running,
-            onCheckedChange = { on ->
-                when {
-                    !on -> FloatingDictationService.stop(context)
-                    !overlay -> context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                    )
-                    !mic -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    else -> startWithNotifications(context, notificationPermission::launch)
-                }
-            },
+            name = stringResource(R.string.floating_settings_title),
+            description = floatingStatus(c),
+            checked = c.running,
+            onCheckedChange = c.toggle,
         )
-        ListItem(
-            modifier = Modifier.clickable {
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            },
-            headlineContent = { Text("Vkládání textu do polí", fontWeight = FontWeight.SemiBold) },
-            supportingContent = {
-                Text(
-                    if (insertion) "Zapnuto: diktát z plovoucího tlačítka se vloží na místo kurzoru."
-                    else "Vypnuto: diktát skončí ve schránce. Klepnutím otevřete Přístupnost → Transcribro NPU " +
-                        "a službu zapněte. Čte jen pole, do kterého se píše."
-                )
-            },
+        SettingsIconItem(
+            name = stringResource(R.string.floating_settings_insertion_title),
+            description = if (c.insertion) stringResource(R.string.floating_settings_insertion_on)
+                else stringResource(R.string.floating_settings_insertion_off, stringResource(R.string.app_name)),
+            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
         )
     }
 }

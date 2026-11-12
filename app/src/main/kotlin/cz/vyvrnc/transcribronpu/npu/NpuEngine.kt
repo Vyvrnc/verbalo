@@ -3,6 +3,7 @@ package cz.vyvrnc.transcribronpu.npu
 import android.content.Context
 import android.util.Log
 import cz.vyvrnc.transcribronpu.history.AppLog
+import dev.soupslurpr.transcribro.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -95,7 +96,7 @@ object NpuEngine {
     /** Call with [mutex] held. */
     private fun ensureLoaded(context: Context): Long {
         if (handle != 0L) return handle
-        if (!NpuModel.ready(context)) throw IllegalStateException("NPU model není stažený (Nastavení → NPU model)")
+        if (!NpuModel.ready(context)) throw IllegalStateException(context.getString(R.string.file_error_model_missing))
         configureDspEnvironment(context)
         val t0 = System.nanoTime()
         handle = try {

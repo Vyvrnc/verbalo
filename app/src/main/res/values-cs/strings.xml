@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Czech for values/strings.xml (the strings marked translatable="false" stay English). -->
+<resources>
+    <string name="settings">Nastavení</string>
+    <string name="view_source_code_setting_name">Zdrojový kód</string>
+    <string name="view_source_code_setting_description">Zdrojový kód Verbala na GitHubu</string>
+    <string name="privacy_policy_setting_name">Zásady ochrany soukromí</string>
+    <string name="privacy_policy_setting_description">Zásady ochrany soukromí v aplikaci</string>
+    <string name="license">Licence</string>
+    <string name="privacy_policy">Zásady ochrany soukromí</string>
+    <string name="license_setting_name">Licence</string>
+    <string name="license_setting_description">Licence aplikace</string>
+    <string name="credits">Poděkování</string>
+    <string name="credits_setting_name">Poděkování</string>
+    <string name="credits_setting_description">Licence open-source kódu, který aplikace používá</string>
+    <string name="pitch_black_background_setting_name">Černé pozadí</string>
+    <string name="pitch_black_background_setting_description">V tmavém režimu použije čistě černé pozadí (OLED)</string>
+    <string name="about_setting_category">O aplikaci</string>
+    <string name="theme">Vzhled</string>
+    <string name="start">Domů</string>
+    <string name="history">Historie</string>
+    <string name="auto_switch_to_previous_input_method_setting_name">Vrátit předchozí klávesnici</string>
+    <string name="voice_input_keyboard_setting_category">Hlasová klávesnice</string>
+    <string name="auto_switch_to_previous_input_method_setting_description">Po dokončení rozpoznávání se automaticky přepne zpět na předchozí klávesnici</string>
+    <string name="auto_stop_recognition_setting_name">Automaticky ukončit</string>
+    <string name="auto_stop_recognition_setting_description">Rozpoznávání skončí po zhruba 3 s ticha (klávesnice i plovoucí tlačítko)</string>
+    <string name="auto_start_recognition_setting_name">Automaticky spustit</string>
+    <string name="auto_start_recognition_setting_description">Rozpoznávání začne hned po přepnutí z jiné klávesnice</string>
+    <string name="auto_send_transcription_setting_name">Automaticky odeslat</string>
+    <string name="auto_send_transcription_setting_description">Po vložení textu stiskne v poli Odeslat/Enter (klávesnice i plovoucí tlačítko)</string>
+    <string name="text_insertion_service_label">Verbalo – vkládání diktátu</string>
+    <string name="text_insertion_service_description">Vloží text nadiktovaný plovoucím tlačítkem do pole, ve kterém je kurzor. Čte jen to pole, nic neukládá ani neodesílá.</string>
+</resources>

@@ -7,18 +7,30 @@ import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -31,10 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -42,204 +53,177 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import cz.vyvrnc.transcribronpu.file.FileTranscriptionActivity
+import cz.vyvrnc.transcribronpu.npu.NpuSupport
 import dev.soupslurpr.transcribro.R
+import dev.soupslurpr.transcribro.ui.reusablecomposables.ActionRow
 import dev.soupslurpr.transcribro.ui.reusablecomposables.ScreenLazyColumn
-import java.time.LocalDateTime
-import kotlin.random.Random
+import dev.soupslurpr.transcribro.ui.reusablecomposables.SectionLabel
+import dev.soupslurpr.transcribro.ui.reusablecomposables.VerbaloCard
+import dev.soupslurpr.transcribro.ui.settings.FloatingController
+import dev.soupslurpr.transcribro.ui.settings.floatingStatus
+import dev.soupslurpr.transcribro.ui.settings.rememberFloatingController
+import dev.soupslurpr.transcribro.ui.theme.VerbaloTheme
+import dev.soupslurpr.transcribro.ui.theme.enterOnce
 
+/**
+ * Home. The floating button first (the thing used most: one tap, no trip to Settings), then
+ * transcribing a recording, then what is still to set up for the keyboard and voice input.
+ */
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun StartScreen() {
     val context = LocalContext.current
-
     val lifecycleOwner = LocalLifecycleOwner.current
+    val microphone = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    val floating = rememberFloatingController()
+    var keyboardEnabled by rememberSaveable { mutableStateOf(isMyInputMethodEnabled(context)) }
 
-    val microphonePermissionState = rememberPermissionState(
-        Manifest.permission.RECORD_AUDIO
-    )
-
-    var isMyInputMethodEnabled by rememberSaveable {
-        mutableStateOf(
-            isMyInputMethodEnabled(context)
-        )
-    }
-
+    // The keyboard is turned on in system settings: check again whenever the user comes back.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) {
-                isMyInputMethodEnabled = isMyInputMethodEnabled(context)
-            }
+            if (event == Lifecycle.Event.ON_START) keyboardEnabled = isMyInputMethodEnabled(context)
         }
-
         lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    val isAprilFools = ((LocalDateTime.now().monthValue == 4) && (LocalDateTime.now().dayOfMonth == 1))
-
-    val randomValue = Random.nextInt(0, 24)
-    val splashMessage = rememberSaveable {
-        when (randomValue) {
-            0 -> "Where every word counts, unless it's a typo."
-            1 -> "Always here to listen, even if it's just your fridge humming."
-            2 -> "Because your thoughts deserve to be transcribed, word for word."
-            3 -> "Talk nerdy to me. I'll translate it to text."
-            4 -> "Turning rambles into readable recaps with a tap."
-            5 -> "Whisper, sing, or discuss the theory of relativity, I've got you covered."
-            6 -> "Where \"I didn't catch that\" simply doesn't exist."
-            7 -> "Speak of the devil, and I shall make him grammatically correct."
-            8 -> "In a world of autocorrect fails, remains your faithful scribe."
-            9 -> "Fine-tuning your \"ums\" and \"ahs\"—catching them when they count but skimming over when they're just filler."
-            10 -> "Don't worry about the loud coffee shop. I listen to you, not the latte art."
-            11 -> "Bridging the gap between brainwaves and text, one word at a time."
-            12 -> "You do the talking; I handle the typing. Teamwork makes the dream work."
-            13 -> "Where your voice gets VIP treatment, no velvet rope required."
-            14 -> "Transcribruh, Transcribruv, Transcribrah"
-            15 -> "Unofficially competing for the title of \"World’s Most Patient Listener\" since launch."
-            16 -> "Because typing is soooo 20th century."
-            17 -> "Quietly accurate, loudly private."
-            18 -> "Speech-to-text without the cloud circus."
-            19 -> "When speed matters and privacy matters more."
-            20 -> "Freeing you from thumb cramps since 2024."
-            21 -> "Save the thumbs, use thy tongue."
-            22 -> "Doesn't work well with brainrot. Yet."
-            23 -> "Making sure \"once upon a time\" never becomes \"one upon a tim\"."
-            else -> "Hey! Stop reading my source code without my consent! Just kidding, I'm open source :)"
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     ScreenLazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(200.dp)
-                        .clip(CircleShape)
-                        .background(colorResource(id = R.color.ic_launcher_background))
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.requiredSize(300.dp)
-                    )
+        item { Header(Modifier.enterOnce(0)) }
+
+        if (!NpuSupport.supported) {
+            item {
+                VerbaloCard(Modifier.enterOnce(1), borderColor = VerbaloTheme.colors.warning) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Rounded.Warning, null, tint = VerbaloTheme.colors.warning, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            stringResource(R.string.npu_unsupported_long, NpuSupport.socModel),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = VerbaloTheme.colors.textSecondary,
+                        )
+                    }
                 }
-                Spacer(Modifier.size(16.dp))
-                Text(
-                    text = stringResource(
-                        if (isAprilFools) {
-                            R.string.welcome_april_fools
-                        } else {
-                            R.string.welcome
-                        }
-                    ),
-                    style = MaterialTheme.typography.headlineLarge
-                )
-                Text(
-                    text = splashMessage,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center
+            }
+        }
+
+        item { FloatingCard(floating, Modifier.enterOnce(2)) }
+        if (floating.running && !floating.insertion) {
+            item {
+                ActionRow(
+                    icon = Icons.Rounded.ContentPaste,
+                    title = stringResource(R.string.start_insertion_title),
+                    subtitle = stringResource(R.string.start_insertion_subtitle),
+                    onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                    modifier = Modifier.enterOnce(3),
                 )
             }
         }
+
+        item { SectionLabel(stringResource(R.string.start_section_transcribe), Modifier.enterOnce(4)) }
         item {
-            ElevatedCard {
-                Column(
-                    Modifier.padding(16.dp)
-                ) {
-                    Text("Přepis nahrávky ze souboru: hlasovka, nahraný hovor nebo video. Jde i přes Sdílet z jiné aplikace.")
-                    Spacer(Modifier.padding(8.dp))
-                    FilledTonalButton(
-                        onClick = { context.startActivity(Intent(context, FileTranscriptionActivity::class.java)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Přepsat nahrávku")
-                    }
-                }
+            ActionRow(
+                icon = Icons.Rounded.AudioFile,
+                title = stringResource(R.string.start_file_title),
+                subtitle = stringResource(R.string.start_file_subtitle),
+                onClick = { context.startActivity(Intent(context, FileTranscriptionActivity::class.java)) },
+                modifier = Modifier.enterOnce(5),
+            )
+        }
+
+        item { SectionLabel(stringResource(R.string.start_section_keyboard), Modifier.enterOnce(6)) }
+        if (!microphone.status.isGranted) {
+            item {
+                ActionRow(
+                    icon = Icons.Rounded.Mic,
+                    title = stringResource(R.string.start_mic_title),
+                    subtitle = stringResource(R.string.start_mic_subtitle),
+                    onClick = { microphone.launchPermissionRequest() },
+                    modifier = Modifier.enterOnce(7),
+                )
             }
         }
         item {
-            if (!isMyInputMethodEnabled) {
-                ElevatedCard {
-                    Column(
-                        Modifier.padding(16.dp)
-                    ) {
-                        Text("If you want to use the Transcribro Voice Input keyboard, please turn it on in system settings.")
-                        Spacer(Modifier.padding(8.dp))
-                        FilledTonalButton(
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                context.startActivity(intent)
-                            }
-                        ) {
-                            Text("Open on-screen keyboard system settings")
-                        }
-                    }
-                }
-            }
+            ActionRow(
+                icon = Icons.Rounded.Keyboard,
+                title = stringResource(if (keyboardEnabled) R.string.start_keyboard_on_title else R.string.start_keyboard_title),
+                subtitle = stringResource(if (keyboardEnabled) R.string.start_keyboard_on_subtitle else R.string.start_keyboard_subtitle),
+                onClick = {
+                    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                },
+                modifier = Modifier.enterOnce(8),
+            )
         }
-        item {
-            ElevatedCard {
-                Column(
-                    Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        "If you want other apps that use the user-selected voice input app to use Transcribro," +
-                                " you need to grant Transcribro Microphone access " +
-                                "(make sure to select \"While using the app\" or it won't work properly), and then select " +
-                                "Transcribro Speech Recognition Service as the voice input app in settings." +
-                                " Go to System > Languages > Voice input, and then make sure Transcribro Speech Recognition Service is selected as the voice input app.",
-                    )
-                    Spacer(Modifier.padding(8.dp))
-                    FilledTonalButton(
-                        enabled = !microphonePermissionState.status.isGranted,
-                        onClick = {
-                            microphonePermissionState.launchPermissionRequest()
-                        }
-                    ) {
-                        Text("Grant microphone permission (make sure to select \"While using the app\")")
-                    }
-                    Spacer(Modifier.padding(4.dp))
-                    FilledTonalButton(
-                        enabled = microphonePermissionState.status.isGranted,
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_SETTINGS)
-                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            context.startActivity(intent)
-                        }
-                    ) {
-                        Text("Open settings (Navigate to System > Language & region > Speech > Voice input)")
-                    }
-                    Spacer(Modifier.padding(8.dp))
-                    Text("If you already selected Transcribro as the voice input app, please ignore this.")
-                }
-            }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+/** Mascot, name and tagline in one row: the screen is for actions, not a splash. */
+@Composable
+private fun Header(modifier: Modifier) {
+    Row(modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.verbalo_mascot), contentDescription = null, modifier = Modifier.size(64.dp))
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = VerbaloTheme.colors.textPrimary)
+            Text(stringResource(R.string.start_tagline), style = MaterialTheme.typography.bodySmall, color = VerbaloTheme.colors.textMuted)
         }
+    }
+}
+
+private val HeroShape = RoundedCornerShape(16.dp)
+
+/** The floating button's switch, large: the whole card toggles it. */
+@Composable
+private fun FloatingCard(c: FloatingController, modifier: Modifier) {
+    val colors = VerbaloTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(HeroShape)
+            .background(colors.surface)
+            .border(1.dp, if (c.running) colors.primary else colors.border, HeroShape)
+            .toggleable(value = c.running, role = Role.Switch, onValueChange = c.toggle)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
+                .background(if (c.running) colors.primary else colors.surfaceRaised),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Mic,
+                contentDescription = null,
+                tint = if (c.running) colors.onPrimary else colors.primarySoft,
+                modifier = Modifier.size(30.dp),
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.floating_settings_title), style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(floatingStatus(c), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = c.running,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = colors.primary,
+                checkedThumbColor = colors.onPrimary,
+                checkedBorderColor = colors.primary,
+                uncheckedTrackColor = colors.surfaceRaised,
+                uncheckedThumbColor = colors.textMuted,
+                uncheckedBorderColor = colors.border,
+            ),
+        )
     }
 }
 
 fun isMyInputMethodEnabled(context: Context): Boolean {
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-
-    val enabledInputMethods = imm.enabledInputMethodList
-
-    val myInputMethodPackageName = context.packageName
-
-    for (inputMethod in enabledInputMethods) {
-        if (myInputMethodPackageName == inputMethod.packageName) {
-            return true
-        }
-    }
-
-    return false
+    return imm.enabledInputMethodList.any { it.packageName == context.packageName }
 }

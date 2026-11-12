@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import dev.soupslurpr.transcribro.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,7 +40,7 @@ class FileTranscriptionService : Service() {
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CHANNEL, "Přepis nahrávek", NotificationManager.IMPORTANCE_LOW))
+            .createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.file_channel_name), NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -75,9 +76,9 @@ class FileTranscriptionService : Service() {
 
     private fun notification(s: FileTranscription.State): Notification {
         val (text, progress) = when (s) {
-            is FileTranscription.State.Decoding -> "Načítám ${s.name}" to s.progress
-            is FileTranscription.State.Transcribing -> "Přepisuji ${s.name} – ${(s.progress * 100).toInt()} %" to s.progress
-            else -> "Přepis nahrávky" to 0f
+            is FileTranscription.State.Decoding -> getString(R.string.file_notification_decoding, s.name) to s.progress
+            is FileTranscription.State.Transcribing -> getString(R.string.file_notification_transcribing, s.name, (s.progress * 100).toInt()) to s.progress
+            else -> getString(R.string.file_notification_idle) to 0f
         }
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, FileTranscriptionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -85,7 +86,7 @@ class FileTranscriptionService : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Transcribro NPU")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setProgress(1000, (progress * 1000).toInt(), false)
             .setOngoing(true)

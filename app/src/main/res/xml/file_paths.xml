@@ -2,4 +2,6 @@
 <!-- History export: the zip is written to cache/export and shared through FileProvider. -->
 <paths>
     <cache-path name="export" path="export/" />
+    <!-- One transcript as a .md/.txt attachment (TranscriptExport). -->
+    <cache-path name="share" path="share/" />
 </paths>

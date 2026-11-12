@@ -1,6 +1,8 @@
 package cz.vyvrnc.transcribronpu.llm
 
 import android.content.Context
+import androidx.annotation.StringRes
+import dev.soupslurpr.transcribro.R
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -17,23 +19,26 @@ import java.security.MessageDigest
  * builds: the generic one runs on the GPU (or CPU), the SM8750 one only on that NPU.
  */
 enum class LlmModel(
-    val label: String,
+    @StringRes private val labelRes: Int,
     private val fileName: String,
     val size: Long,
     private val sha256: String,
 ) {
     GPU(
-        "Gemma 4 E2B it (LiteRT-LM, litert-community)",
+        R.string.llm_model_label_gpu,
         "gemma-4-E2B-it.litertlm",
         2_588_147_712L,
         "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
     ),
     NPU(
-        "Gemma 4 E2B it pro Snapdragon 8 Elite NPU (LiteRT-LM, litert-community)",
+        R.string.llm_model_label_npu,
         "gemma-4-E2B-it_qualcomm_sm8750.litertlm",
         3_016_294_400L,
         "41dd675fbe735b6029012b5576a5716bac614fd8156de0128db4c9dff3cebd4e",
     );
+
+    /** Display name of the build, in the app language. */
+    fun label(context: Context): String = context.getString(labelRes)
 
     private val url get() =
         "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/$fileName"
@@ -80,12 +85,12 @@ enum class LlmModel(
                             got += n
                             if (got - lastReport > (1 shl 20)) {
                                 lastReport = got
-                                onProgress("Stahuji Gemmu", part.length(), size)
+                                onProgress(context.getString(R.string.llm_phase_downloading), part.length(), size)
                             }
                         }
                     }
                 }
-                if (got == 0L) error("Server neposlal žádná data")
+                if (got == 0L) error(context.getString(R.string.llm_error_no_data))
             } finally {
                 conn.disconnect()
             }
@@ -103,15 +108,15 @@ enum class LlmModel(
                 done += n
                 if (done - lastReport > (64 shl 20)) {
                     lastReport = done
-                    onProgress("Kontroluji", done, size)
+                    onProgress(context.getString(R.string.llm_phase_verifying), done, size)
                 }
             }
         }
         val hex = digest.digest().joinToString("") { "%02x".format(it) }
         if (hex != sha256) {
             part.delete()
-            error("Kontrolní součet nesouhlasí, stáhne se znovu")
+            error(context.getString(R.string.llm_error_checksum))
         }
-        if (!part.renameTo(target)) error("Nelze přejmenovat ${part.name}")
+        if (!part.renameTo(target)) error(context.getString(R.string.llm_error_rename, part.name))
     }
 }

@@ -1,93 +1,101 @@
 package dev.soupslurpr.transcribro.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import dev.soupslurpr.transcribro.preferences.PreferencesViewModel
 
-/**
- * Dark color scheme for devices < Android 12, which do not support dynamic color.
- */
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
+/** Radii 8 / 12 / 16 (docs/design-language.md); dialogs and sheets use 16, not Material's 28. */
+val VerbaloShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(16.dp),
 )
 
 /**
- * Light color scheme for devices < Android 12, which do not support dynamic color.
+ * The Verbalo roles on Material's slots. Every container is a solid colour from the palette and
+ * there is no tonal tint, so cards, sheets and dialogs stay opaque and flat (no shadows on dark).
  */
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
+private fun scheme(c: VerbaloColors): ColorScheme {
+    val base = if (c.isDark) darkColorScheme() else lightColorScheme()
+    return base.copy(
+        primary = c.primary,
+        onPrimary = c.onPrimary,
+        primaryContainer = c.surfaceRaised,
+        onPrimaryContainer = c.primarySoft,
+        inversePrimary = c.primarySoft,
+        secondary = c.primarySoft,
+        onSecondary = c.onPrimary,
+        secondaryContainer = c.surfaceRaised,
+        onSecondaryContainer = c.primarySoft,
+        tertiary = c.accent,
+        onTertiary = c.onPrimary,
+        tertiaryContainer = c.surfaceRaised,
+        onTertiaryContainer = c.accent,
+        background = c.background,
+        onBackground = c.textPrimary,
+        surface = c.background,
+        onSurface = c.textPrimary,
+        surfaceVariant = c.surfaceRaised,
+        onSurfaceVariant = c.textSecondary,
+        surfaceTint = Color.Transparent,
+        surfaceBright = c.surfaceRaised,
+        surfaceDim = c.background,
+        surfaceContainerLowest = c.surface,
+        surfaceContainerLow = c.surface,
+        surfaceContainer = c.surface,
+        surfaceContainerHigh = c.surfaceRaised,
+        surfaceContainerHighest = c.surfaceRaised,
+        inverseSurface = c.surfaceRaised,
+        inverseOnSurface = c.textPrimary,
+        outline = c.border,
+        outlineVariant = c.border,
+        error = c.error,
+        onError = if (c.isDark) Color(0xFF2A0A0A) else Color.White,
+        errorContainer = c.surfaceRaised,
+        onErrorContainer = c.error,
+        scrim = Color.Black,
+    )
+}
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
+/** The palette, type and shapes of Verbalo; follows the system dark/light setting. */
 @Composable
-fun TranscribroTheme(
+fun VerbaloTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
     preferencesViewModel: PreferencesViewModel,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val settingsUiState by preferencesViewModel.uiState.collectAsState()
-
-    val pitchBlackBackground = settingsUiState.pitchBlackBackground.second.value and darkTheme
-
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) {
-                if (pitchBlackBackground) {
-                    dynamicDarkColorScheme(context).copy(
-                        background = Color.Black,
-                        surface = Color.Black,
-                    )
-                } else {
-                    dynamicDarkColorScheme(context)
-                }
-            } else {
-                dynamicLightColorScheme(context)
-            }
-        }
-
-        darkTheme -> {
-            if (pitchBlackBackground) {
-                DarkColorScheme.copy(
-                    background = Color.Black,
-                    surface = Color.Black
-                )
-            } else {
-                DarkColorScheme
-            }
-        }
-
-        else -> LightColorScheme
+    val pitchBlack = settingsUiState.pitchBlackBackground.second.value && darkTheme
+    val colors = when {
+        pitchBlack -> VerbaloPalette.Dark.copy(background = Color.Black)
+        darkTheme -> VerbaloPalette.Dark
+        else -> VerbaloPalette.Light
     }
+    CompositionLocalProvider(LocalVerbaloColors provides colors) {
+        MaterialTheme(
+            colorScheme = scheme(colors),
+            typography = Typography,
+            shapes = VerbaloShapes,
+            content = content,
+        )
+    }
+}
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+object VerbaloTheme {
+    val colors: VerbaloColors
+        @Composable @ReadOnlyComposable get() = LocalVerbaloColors.current
 }

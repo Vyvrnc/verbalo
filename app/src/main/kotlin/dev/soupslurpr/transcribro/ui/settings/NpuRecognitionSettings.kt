@@ -1,5 +1,8 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import dev.soupslurpr.transcribro.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cz.vyvrnc.transcribronpu.npu.Customization
@@ -44,48 +49,47 @@ fun NpuRecognitionSettings() {
         val ok = runCatching {
             context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Customization.export(context).toByteArray()) }
         }.isSuccess
-        Toast.makeText(context, if (ok) "Uloženo" else "Uložení se nepovedlo", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(if (ok) R.string.settings_saved else R.string.settings_save_failed), Toast.LENGTH_SHORT).show()
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val message = runCatching {
             val json = context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
             Customization.import(context, json)
-        }.getOrElse { it.message ?: "Import se nepovedl" }
+        }.getOrElse { it.message ?: context.getString(R.string.settings_import_failed) }
         vocabulary = NpuSettings.vocabulary(context)
         replacements = NpuSettings.replacements(context)
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsItem(
-            name = "Jazyk",
-            description = NpuSettings.LANGUAGE_CHOICES.firstOrNull { it.first == language }?.second ?: language,
+            name = stringResource(R.string.settings_language_title),
+            description = NpuSettings.LANGUAGE_CHOICES.firstOrNull { it.first == language }?.second?.let { stringResource(it) } ?: language,
         ) { dialog = "language" }
         SettingsItem(
-            name = "Slovník",
+            name = stringResource(R.string.settings_vocabulary_title),
             description = NpuSettings.vocabularyTerms(vocabulary).takeIf { it.isNotEmpty() }
-                ?.joinToString(", ")?.let { "Napovídá modelu: $it" }
-                ?: "Jména a odborné výrazy, které má model upřednostnit (např. Flowbox, Claude, DI).",
+                ?.joinToString(", ")?.let { stringResource(R.string.settings_vocabulary_hints, it) }
+                ?: stringResource(R.string.settings_vocabulary_description),
         ) { dialog = "vocabulary" }
         SettingsItem(
-            name = "Náhrady",
+            name = stringResource(R.string.settings_replacements_title),
             description = NpuSettings.replacementRules(replacements).size.let {
-                if (it == 0) "Opraví slova, která model slyší jinak: „dejíčko => DI“." else "Pravidel: $it"
+                if (it == 0) stringResource(R.string.settings_replacements_description) else stringResource(R.string.settings_replacements_count, it)
             },
         ) { dialog = "replacements" }
         SettingsItem(
-            name = "Exportovat slovník a náhrady",
-            description = "Uloží slovník, náhrady a vlastní pokyny pro úpravu textu do souboru JSON.",
-        ) { exportLauncher.launch("transcribro-prizpusobeni.json") }
+            name = stringResource(R.string.settings_export_title),
+            description = stringResource(R.string.settings_export_description),
+        ) { exportLauncher.launch("verbalo-customization.json") }
         SettingsItem(
-            name = "Importovat slovník a náhrady",
-            description = "Doplní výrazy a náhrady ze souboru (stávající zůstanou), vlastní pokyny nahradí.",
+            name = stringResource(R.string.settings_import_title),
+            description = stringResource(R.string.settings_import_description),
         ) { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         SettingsSwitchItem(
-            name = "Živý přepis",
-            description = "Během mluvení ukazuje rozpracovaný text (klávesnice Transcribro a plovoucí tlačítko). " +
-                "Víc zatěžuje NPU a baterii.",
+            name = stringResource(R.string.settings_live_title),
+            description = stringResource(R.string.settings_live_description),
             checked = live,
             onCheckedChange = { live = it; NpuSettings.setLivePartials(context, it) },
         )
@@ -94,7 +98,7 @@ fun NpuRecognitionSettings() {
     when (dialog) {
         "language" -> AlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Jazyk diktování") },
+            title = { Text(stringResource(R.string.settings_language_dialog_title)) },
             text = {
                 Column {
                     NpuSettings.LANGUAGE_CHOICES.forEach { (value, label) ->
@@ -110,24 +114,23 @@ fun NpuRecognitionSettings() {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(selected = value == language, onClick = null)
-                            Text(label, Modifier.padding(start = 12.dp))
+                            Text(stringResource(label), Modifier.padding(start = 12.dp))
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Zavřít") } },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.settings_close)) } },
         )
         "vocabulary" -> TextDialog(
-            title = "Slovník",
-            hint = "Výrazy oddělené čárkou nebo na řádcích. Model je dostane jako kontext, takže je " +
-                "spíš napíše správně. Stačí pár desítek slov, delší seznam se zkrátí.",
+            title = stringResource(R.string.settings_vocabulary_title),
+            hint = stringResource(R.string.settings_vocabulary_dialog_hint),
             initial = vocabulary,
             onDismiss = { dialog = null },
             onSave = { vocabulary = it; NpuSettings.setVocabulary(context, it); dialog = null },
         )
         "replacements" -> TextDialog(
-            title = "Náhrady",
-            hint = "Jedno pravidlo na řádek ve tvaru „slyšené => napsané“. Celá slova, velikost písmen nehraje roli.",
+            title = stringResource(R.string.settings_replacements_title),
+            hint = stringResource(R.string.settings_replacements_dialog_hint),
             initial = replacements,
             onDismiss = { dialog = null },
             onSave = { replacements = it; NpuSettings.setReplacements(context, it); dialog = null },
@@ -137,11 +140,7 @@ fun NpuRecognitionSettings() {
 
 @Composable
 private fun SettingsItem(name: String, description: String, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(name, fontWeight = FontWeight.SemiBold) },
-        supportingContent = { Text(description) },
-    )
+    SettingsIconItem(name = name, description = description, icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight, onClick = onClick)
 }
 
 @Composable
@@ -163,7 +162,7 @@ private fun TextDialog(title: String, hint: String, initial: String, onDismiss: 
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Uložit") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text(stringResource(R.string.settings_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_cancel)) } },
     )
 }

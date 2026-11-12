@@ -1,5 +1,21 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import dev.soupslurpr.transcribro.ui.reusablecomposables.SectionLabel
+import dev.soupslurpr.transcribro.ui.theme.VerbaloTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -48,7 +64,7 @@ fun SettingsStartScreen(
             .fillMaxSize()
     ) {
         item {
-            SettingsCategory("Rozpoznávání řeči (NPU)")
+            SettingsCategory(stringResource(R.string.settings_section_recognition))
         }
         item {
             NpuModelItem()
@@ -57,7 +73,7 @@ fun SettingsStartScreen(
             NpuRecognitionSettings()
         }
         item {
-            SettingsCategory("Plovoucí diktování")
+            SettingsCategory(stringResource(R.string.settings_section_floating))
         }
         item {
             FloatingSettings()
@@ -156,7 +172,7 @@ fun SettingsStartScreen(
                 description = stringResource(id = R.string.view_source_code_setting_description),
                 icon = Icons.AutoMirrored.Filled.ExitToApp,
                 onClick = {
-                    localUriHandler.openUri("https://github.com/soupslurpr/Transcribro")
+                    localUriHandler.openUri("https://github.com/Vyvrnc/Transcribro-NPU")
                 }
             )
         }
@@ -187,16 +203,42 @@ fun SettingsStartScreen(
     }
 }
 
+/** Section label above a group of settings (docs/design-language.md, "Section label"). */
 @Composable
 fun SettingsCategory(category: String) {
-    Text(
-        text = category,
-        modifier = Modifier.padding(top = 8.dp),
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Bold
-    )
+    SectionLabel(category)
+}
+
+private val RowShape = RoundedCornerShape(12.dp)
+
+/** One setting as a card row: title, one or two caption lines, a control at the end. */
+@Composable
+private fun SettingsRow(
+    modifier: Modifier,
+    name: String,
+    description: String?,
+    trailing: @Composable () -> Unit,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RowShape)
+            .background(VerbaloTheme.colors.surface)
+            .border(1.dp, VerbaloTheme.colors.border, RowShape)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleSmall, color = VerbaloTheme.colors.textPrimary)
+            if (description != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(description, style = MaterialTheme.typography.bodySmall, color = VerbaloTheme.colors.textMuted)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        trailing()
+    }
 }
 
 @Composable
@@ -207,32 +249,24 @@ fun SettingsSwitchItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    ListItem(
-        modifier = modifier
-            .toggleable(
-                value = checked,
-                onValueChange = { onCheckedChange(it) }
+    SettingsRow(
+        modifier.toggleable(value = checked, role = Role.Switch, onValueChange = { onCheckedChange(it) }),
+        name,
+        description,
+    ) {
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = VerbaloTheme.colors.primary,
+                checkedThumbColor = VerbaloTheme.colors.onPrimary,
+                checkedBorderColor = VerbaloTheme.colors.primary,
+                uncheckedTrackColor = VerbaloTheme.colors.surfaceRaised,
+                uncheckedThumbColor = VerbaloTheme.colors.textMuted,
+                uncheckedBorderColor = VerbaloTheme.colors.border,
             ),
-        headlineContent = {
-            Text(
-                name,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        supportingContent = run {
-            if (description != null) {
-                { Text(description) }
-            } else {
-                null
-            }
-        },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = null
-            )
-        }
-    )
+        )
+    }
 }
 
 @Composable
@@ -243,29 +277,7 @@ fun SettingsIconItem(
     icon: ImageVector,
     onClick: () -> Unit
 ) {
-    ListItem(
-        modifier = modifier
-            .clickable(
-                onClick = onClick
-            ),
-        headlineContent = {
-            Text(
-                name,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        supportingContent = run {
-            if (description != null) {
-                { Text(description) }
-            } else {
-                null
-            }
-        },
-        trailingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null
-            )
-        }
-    )
+    SettingsRow(modifier.clickable(role = Role.Button, onClick = onClick), name, description) {
+        Icon(imageVector = icon, contentDescription = null, tint = VerbaloTheme.colors.textMuted)
+    }
 }

@@ -65,6 +65,12 @@ import kotlin.math.abs
  */
 class FloatingDictationService : Service() {
     companion object {
+        // Neutral overlay colours, not the app theme (see paintButton).
+        private const val IDLE = 0xFF37474F.toInt()
+        private const val RECORDING = 0xFFC62828.toInt()
+        private const val BUBBLE = 0xFF263238.toInt()
+        private const val WHITE = 0xFFFFFFFF.toInt()
+
         private const val CHANNEL = "floating_dictation"
         private const val TAG = "Plovoucí tlačítko"
         private const val NOTIFICATION_ID = 1
@@ -134,7 +140,7 @@ class FloatingDictationService : Service() {
         startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         if (button == null) {
             if (!Settings.canDrawOverlays(this)) {
-                Toast.makeText(this, "Plovoucí tlačítko potřebuje oprávnění „Zobrazovat přes ostatní aplikace“", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.floating_overlay_permission_toast), Toast.LENGTH_LONG).show()
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -162,7 +168,7 @@ class FloatingDictationService : Service() {
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Plovoucí tlačítko", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, getString(R.string.floating_channel_name), NotificationManager.IMPORTANCE_LOW)
         )
         val stop = PendingIntent.getService(
             this, 0, Intent(this, FloatingDictationService::class.java).setAction(ACTION_STOP),
@@ -170,10 +176,10 @@ class FloatingDictationService : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_floating_mic)
-            .setContentTitle("Plovoucí diktování je zapnuté")
-            .setContentText("Mikrofon se zapne jen po klepnutí na tlačítko.")
+            .setContentTitle(getString(R.string.floating_notification_title))
+            .setContentText(getString(R.string.floating_notification_text))
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Vypnout", stop).build())
+            .addAction(Notification.Action.Builder(null, getString(R.string.floating_notification_stop), stop).build())
             .build()
     }
 
@@ -197,11 +203,10 @@ class FloatingDictationService : Service() {
             y = prefs.getInt("y", resources.displayMetrics.heightPixels / 2)
         }
         val view = FrameLayout(this).apply {
-            contentDescription = "Diktovat"
+            contentDescription = getString(R.string.floating_button_description)
             elevation = dp(6).toFloat()
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_floating_mic)
-                setColorFilter(0xFFFFFFFF.toInt())
                 val pad = dp(14)
                 setPadding(pad, pad, pad, pad)
             }, FrameLayout.LayoutParams(size, size))
@@ -246,18 +251,23 @@ class FloatingDictationService : Service() {
         buttonParams = params
     }
 
+    /**
+     * Deliberately not in the app's colours: the button floats over other apps, so it stays
+     * quiet and neutral (Matěj, 12. 11. 2026): slate when idle, red while recording, white icon.
+     */
     private fun paintButton(view: View, active: Boolean) {
         view.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(if (active) 0xFFC62828.toInt() else 0xFF37474F.toInt())
+            setColor(if (active) RECORDING else IDLE)
         }
+        ((view as? FrameLayout)?.getChildAt(0) as? ImageView)?.setColorFilter(WHITE)
     }
 
     private fun toggleDictation() {
         if (cleaning) return
         if (dictating) {
             recognizer?.stopListening()
-            showBubble("Dokončuji přepis…")
+            showBubble(getString(R.string.floating_bubble_finishing))
             return
         }
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(
@@ -291,11 +301,10 @@ class FloatingDictationService : Service() {
         dictating = true
         button?.let { paintButton(it, true) }
         showBubble(when {
-            focused != null -> "Poslouchám…"
-            !TextInsertionService.enabled(this) -> "Poslouchám… (vkládání do pole je vypnuté, text půjde do schránky)"
-            !TextInsertionService.connected() ->
-                "Poslouchám… (Android vkládání uspal – vypněte a zapněte ho v Usnadnění, text půjde do schránky)"
-            else -> "Poslouchám…"
+            focused != null -> getString(R.string.floating_bubble_listening)
+            !TextInsertionService.enabled(this) -> getString(R.string.floating_bubble_listening_insert_off)
+            !TextInsertionService.connected() -> getString(R.string.floating_bubble_listening_insert_asleep)
+            else -> getString(R.string.floating_bubble_listening)
         })
         r.startListening(Intent().apply {
             putExtra(MainRecognitionService.EXTRA_SOURCE, "plovoucí tlačítko")
@@ -314,7 +323,7 @@ class FloatingDictationService : Service() {
         if (model != null && sessionText.isNotEmpty()) {
             val raw = sessionText.toString()
             val into = target
-            showBubble("Upravuji text…")
+            showBubble(getString(R.string.floating_bubble_cleaning))
             cleaning = true
             scope.launch {
                 // The recognition session is over; Whisper reloads with the next dictation.
@@ -335,7 +344,7 @@ class FloatingDictationService : Service() {
                 sessionText.append(cleaned)
                 if (insert(cleaned) != true) insertFailed = true
                 cleaning = false
-                deliverEnd(message ?: result.error?.let { "Úprava textu se nepovedla, vložen původní text" },
+                deliverEnd(message ?: result.error?.let { getString(R.string.floating_cleanup_failed) },
                     ok && result.error == null)
             }
             return
@@ -364,8 +373,8 @@ class FloatingDictationService : Service() {
         }
         if (insertFailed && sessionText.isNotEmpty()) {
             getSystemService(ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("Diktát", sessionText.toString()))
-            Toast.makeText(this, "Text je ve schránce (zapněte vkládání v nastavení Transcribro)", Toast.LENGTH_LONG).show()
+                .setPrimaryClip(ClipData.newPlainText(getString(R.string.floating_clip_label), sessionText.toString()))
+            Toast.makeText(this, getString(R.string.floating_clipboard_toast, getString(R.string.app_name)), Toast.LENGTH_LONG).show()
         } else if (message != null) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
@@ -405,10 +414,10 @@ class FloatingDictationService : Service() {
 
         override fun onError(error: Int) = finishDictation(
             when (error) {
-                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "NPU model není stažený (Nastavení Transcribro)"
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Chybí oprávnění k mikrofonu"
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Rozpoznávání je zaneprázdněné"
-                SpeechRecognizer.ERROR_CLIENT -> "Přepis se nepovedl"
+                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> getString(R.string.floating_error_model_missing)
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> getString(R.string.floating_error_permission)
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> getString(R.string.floating_error_busy)
+                SpeechRecognizer.ERROR_CLIENT -> getString(R.string.floating_error_failed)
                 else -> null
             },
             ok = false,
@@ -421,7 +430,7 @@ class FloatingDictationService : Service() {
     private fun showBubble(text: String) {
         if (bubbleDismissed) return
         val b = bubble ?: TextView(this).apply {
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(WHITE)
             textSize = 15f
             maxLines = 4
             val pad = dp(10)
@@ -429,7 +438,7 @@ class FloatingDictationService : Service() {
             // Opaque: the bubble must stay readable over any app.
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
-                setColor(0xFF263238.toInt())
+                setColor(BUBBLE)
             }
         }.also { tv ->
             // Touchable: Android 12+ drops touches that pass through an opaque overlay of another

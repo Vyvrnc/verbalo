@@ -1,6 +1,7 @@
 package cz.vyvrnc.transcribronpu.npu
 
 import android.content.Context
+import dev.soupslurpr.transcribro.R
 import org.json.JSONObject
 
 /**
@@ -21,10 +22,10 @@ object Customization {
         .apply { NpuSettings.cleanupAppsText(context).takeIf { it.isNotEmpty() }?.let { put("cleanupApps", it) } }
         .toString(2)
 
-    /** Returns a short Czech summary for the user; throws IllegalArgumentException on a foreign file. */
+    /** Returns a short summary for the user; throws IllegalArgumentException on a foreign file. */
     fun import(context: Context, json: String): String {
         val o = runCatching { JSONObject(json) }.getOrNull()
-        require(o != null && o.optString("format") == FORMAT) { "Soubor není export z Transcribro NPU" }
+        require(o != null && o.optString("format") == FORMAT) { context.getString(R.string.npu_import_not_export) }
 
         val oldTerms = NpuSettings.vocabularyTerms(NpuSettings.vocabulary(context))
         val newTerms = NpuSettings.vocabularyTerms(o.optString("vocabulary"))
@@ -52,8 +53,8 @@ object Customization {
         val newApps = NpuSettings.parseCleanupApps(o.optString("cleanupApps")).filterKeys { it !in oldApps }
         if (newApps.isNotEmpty()) NpuSettings.setCleanupApps(context, oldApps + newApps)
 
-        return "Přidáno: ${newTerms.size} výrazů do slovníku, ${newLines.size} náhrad" +
-            (if (newApps.isNotEmpty()) ", ${newApps.size} pravidel pro aplikace" else "") +
-            (if (prompt != null) ", pokyny pro úpravu textu nahrazeny." else ".")
+        return context.getString(R.string.npu_import_summary, newTerms.size, newLines.size) +
+            (if (newApps.isNotEmpty()) context.getString(R.string.npu_import_app_rules, newApps.size) else "") +
+            (if (prompt != null) context.getString(R.string.npu_import_prompt_replaced) else ".")
     }
 }

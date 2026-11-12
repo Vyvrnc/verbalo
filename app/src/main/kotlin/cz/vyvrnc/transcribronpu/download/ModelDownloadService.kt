@@ -12,6 +12,8 @@ import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.StringRes
+import dev.soupslurpr.transcribro.R
 import cz.vyvrnc.transcribronpu.llm.LlmModel
 import cz.vyvrnc.transcribronpu.npu.NpuModel
 import kotlinx.coroutines.CancellationException
@@ -34,10 +36,12 @@ import kotlinx.coroutines.launch
  * lock and a Wi-Fi lock while a download runs. Started from the visible settings screen.
  */
 class ModelDownloadService : Service() {
-    enum class Model(val title: String, val notificationId: Int) {
-        WHISPER("NPU model (Whisper)", 41),
-        GEMMA("Model pro úpravu textu (Gemma, GPU)", 42),
-        GEMMA_NPU("Model pro úpravu textu (Gemma, NPU)", 43);
+    enum class Model(@StringRes val titleRes: Int, val notificationId: Int) {
+        WHISPER(R.string.download_model_whisper, 41),
+        GEMMA(R.string.download_model_gemma_gpu, 42),
+        GEMMA_NPU(R.string.download_model_gemma_npu, 43);
+
+        fun title(context: Context): String = context.getString(titleRes)
 
         fun ready(context: Context) = when (this) {
             WHISPER -> NpuModel.ready(context)
@@ -92,7 +96,7 @@ class ModelDownloadService : Service() {
         // startForegroundService() must always be answered with startForeground().
         startForeground(
             model?.notificationId ?: Model.WHISPER.notificationId,
-            notification(model ?: Model.WHISPER, null, "Připojuji…"),
+            notification(model ?: Model.WHISPER, null, getString(R.string.download_connecting)),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         when {
@@ -114,7 +118,7 @@ class ModelDownloadService : Service() {
         synchronized(jobs) {
             jobs.forEach { (model, job) ->
                 job.cancel()
-                _states.update { it + (model to State(running = false, status = "Android stahování pozastavil, klepnutím naváže.")) }
+                _states.update { it + (model to State(running = false, status = getString(R.string.download_paused))) }
                 getSystemService(NotificationManager::class.java).cancel(model.notificationId)
             }
             jobs.clear()
@@ -133,10 +137,10 @@ class ModelDownloadService : Service() {
     private fun launch(model: Model) = synchronized(jobs) {
         if (jobs[model]?.isActive == true) return@synchronized
         acquireLocks()
-        _states.update { it + (model to State(running = true, status = "Připojuji…")) }
+        _states.update { it + (model to State(running = true, status = getString(R.string.download_connecting))) }
         val nm = getSystemService(NotificationManager::class.java)
         // Set by the body; stays as is when the job is cancelled before it even starts.
-        var result: String? = "Stahování přerušeno, při dalším klepnutí naváže."
+        var result: String? = getString(R.string.download_interrupted)
         val job = scope.launch(start = CoroutineStart.LAZY) {
             val self = coroutineContext[Job]
             val started = System.nanoTime()
@@ -145,7 +149,7 @@ class ModelDownloadService : Service() {
                 model.download(this@ModelDownloadService) { phase, done, total ->
                     val secs = ((System.nanoTime() - started) / 1e9).coerceAtLeast(0.1)
                     val fraction = done.toFloat() / total.coerceAtLeast(1)
-                    val text = "%s: %.0f / %.0f MB (%.1f MB/s)".format(
+                    val text = getString(R.string.download_progress,
                         phase, done / 1048576.0, total / 1048576.0, done / 1048576.0 / secs)
                     synchronized(jobs) {
                         if (jobs[model] !== self) return@download
@@ -157,12 +161,12 @@ class ModelDownloadService : Service() {
                         nm.notify(model.notificationId, notification(model, fraction, text))
                     }
                 }
-                if (model.ready(this@ModelDownloadService)) null else "Stažení se nedokončilo, klepnutím naváže."
+                if (model.ready(this@ModelDownloadService)) null else getString(R.string.download_incomplete)
             } catch (e: CancellationException) {
-                "Stahování přerušeno, při dalším klepnutí naváže."
+                getString(R.string.download_interrupted)
             } catch (e: Exception) {
                 Log.e(TAG, "download failed", e)
-                "Chyba: ${e.message}. Klepnutím naváže."
+                getString(R.string.download_error, e.message ?: e.javaClass.simpleName)
             }
         }
         // Runs also for a job cancelled before its body started.
@@ -220,19 +224,19 @@ class ModelDownloadService : Service() {
 
     private fun notification(model: Model, progress: Float?, text: String?): Notification {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Stahování modelů", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.download_channel_name), NotificationManager.IMPORTANCE_LOW))
         val cancel = PendingIntent.getService(
             this, model.notificationId, intent(this, model, ACTION_CANCEL),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Stahuji: ${model.title}")
-            .setContentText(text ?: "Připojuji…")
+            .setContentTitle(getString(R.string.download_notification_title, model.title(this)))
+            .setContentText(text ?: getString(R.string.download_connecting))
             .setProgress(1000, ((progress ?: 0f) * 1000).toInt(), progress == null)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null, "Zrušit", cancel).build())
+            .addAction(Notification.Action.Builder(null, getString(R.string.download_cancel), cancel).build())
             .build()
     }
 }
