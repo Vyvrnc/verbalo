@@ -29,7 +29,7 @@
 | C | Mascot: parrot generated with Codex (image_generation, Lexona hero as style reference), brand/verbalo-*.png; adaptive launcher icon + monochrome in mipmap-*; mascot on the start screen | done 12. 11. (v1; the silhouette may get a second round) |
 | D | Rename: label Verbalo, version 1.0.0 (done 12. 11.). applicationId stays `cz.vyvrnc.transcribronpu` for now: a new one would install as a new app and lose the downloaded 2 GB model, history and settings on the Fold. Kotlin namespaces stay (internal; JNI names bound to them) | done |
 | E | Moving from Transcribro NPU: vocabulary, replacements and prompt via the existing JSON export/import; the model is downloaded again (or copied) | |
-| F | README for Verbalo, credits (Transcribro ISC, whisper.cpp, Silero, OpenAI Whisper, QNN NOTICE), GitHub repo `Vyvrnc/verbalo`, signed APK on Releases | |
+| F | Public repo https://github.com/Vyvrnc/verbalo (renamed from Transcribro-NPU, made public 12. 11.); own commits' author e-mail rewritten to the GitHub noreply address (only the range above soupslurpr's last commit, so his signed commits and tags keep their hashes); old release tags v0.1.0-v0.7.0 moved to the rewritten commits; release v1.0.0 with the signed APK | done |
 | G | Build check: warn when Maven has a newer `qnn-runtime` than the pinned one | |
 
 ## Language (decided 12. 11.)
