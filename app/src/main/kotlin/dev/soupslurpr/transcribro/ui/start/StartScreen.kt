@@ -53,6 +53,10 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import cz.vyvrnc.transcribronpu.file.FileTranscriptionActivity
+import cz.vyvrnc.transcribronpu.file.FileTranscription
+import cz.vyvrnc.transcribronpu.calls.CallAuto
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.runtime.collectAsState
 import cz.vyvrnc.transcribronpu.npu.NpuSupport
 import dev.soupslurpr.transcribro.R
 import dev.soupslurpr.transcribro.ui.reusablecomposables.ActionRow
@@ -110,6 +114,7 @@ fun StartScreen() {
         }
 
         item { FloatingCard(floating, Modifier.enterOnce(2)) }
+        item { TranscriptionStatus(Modifier.enterOnce(2)) }
         if (floating.running && !floating.insertion) {
             item {
                 ActionRow(
@@ -158,6 +163,33 @@ fun StartScreen() {
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
+}
+
+/**
+ * A file or call recording being transcribed right now (and how many calls wait), under the
+ * floating button; a tap opens the transcription screen, like the notification. Nothing when idle.
+ */
+@Composable
+private fun TranscriptionStatus(modifier: Modifier) {
+    val context = LocalContext.current
+    val state by FileTranscription.state.collectAsState()
+    val calls by CallAuto.status.collectAsState()
+    val (name, percent) = when (val s = state) {
+        is FileTranscription.State.Decoding -> s.name to null
+        is FileTranscription.State.Transcribing -> s.name to (s.progress * 100).toInt()
+        else -> return
+    }
+    val parts = mutableListOf(name)
+    parts.add(if (percent == null) stringResource(R.string.start_status_decoding) else "$percent %")
+    if (calls.queued > 1) parts.add(stringResource(R.string.start_status_queued, calls.queued - 1))
+    ActionRow(
+        icon = Icons.Rounded.GraphicEq,
+        title = stringResource(R.string.start_status_title),
+        subtitle = parts.joinToString(" · "),
+        onClick = { context.startActivity(Intent(context, FileTranscriptionActivity::class.java)) },
+        modifier = modifier,
+        primary = true,
+    )
 }
 
 /** Mascot, name and tagline in one row: the screen is for actions, not a splash. */

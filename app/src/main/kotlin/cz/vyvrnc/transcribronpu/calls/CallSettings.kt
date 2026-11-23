@@ -18,7 +18,7 @@ object CallSettings {
     private const val KEY_SINCE = "since_ms"
 
     /** A chosen contact; [number] is in international form (+420…). */
-    data class Contact(val name: String, val number: String)
+    data class Contact(val name: String, val number: String, val company: String = "")
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -53,13 +53,13 @@ object CallSettings {
         val raw = prefs(context).getString(KEY_CONTACTS, null) ?: return emptyList()
         return runCatching {
             val a = JSONArray(raw)
-            List(a.length()) { a.getJSONObject(it).let { o -> Contact(o.getString("name"), o.getString("number")) } }
+            List(a.length()) { a.getJSONObject(it).let { o -> Contact(o.getString("name"), o.getString("number"), o.optString("company")) } }
         }.getOrDefault(emptyList())
     }
 
     fun setContacts(context: Context, value: List<Contact>) {
         val a = JSONArray()
-        value.forEach { a.put(JSONObject().put("name", it.name).put("number", it.number)) }
+        value.forEach { a.put(JSONObject().put("name", it.name).put("number", it.number).put("company", it.company)) }
         prefs(context).edit().putString(KEY_CONTACTS, a.toString()).apply()
     }
 
@@ -71,6 +71,6 @@ object CallSettings {
         setContacts(context, all)
     }
 
-    fun removeContact(context: Context, number: String) =
-        setContacts(context, contacts(context).filterNot { it.number == number })
+    fun removeContacts(context: Context, numbers: Set<String>) =
+        setContacts(context, contacts(context).filterNot { it.number in numbers })
 }

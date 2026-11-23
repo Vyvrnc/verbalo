@@ -118,4 +118,12 @@
     <string name="calls_pick_loading">Načítám kontakty…</string>
     <string name="calls_pick_none">Žádný kontakt nenalezen</string>
     <string name="calls_pick_add">Přidat (%1$d)</string>
+    <string name="calls_contacts_remove">Odebrat (%1$d)</string>
+    <string name="calls_pick_ticked">označeno %1$d</string>
+    <plurals name="calls_contacts_count">
+        <item quantity="one">%1$d kontakt</item>
+        <item quantity="few">%1$d kontakty</item>
+        <item quantity="many">%1$d kontaktu</item>
+        <item quantity="other">%1$d kontaktů</item>
+    </plurals>
 </resources>

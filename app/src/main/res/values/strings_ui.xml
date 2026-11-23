@@ -68,4 +68,7 @@
     <string name="npu_unsupported_long">This phone (%1$s) has no supported NPU. Recognition needs a Snapdragon 8 Elite (for example Galaxy S25 or Z Fold7); the app opens, but it cannot transcribe here.</string>
     <string name="history_expand">Show all</string>
     <string name="history_collapse">Collapse</string>
+    <string name="start_status_title">Transcribing</string>
+    <string name="start_status_decoding">reading the audio</string>
+    <string name="start_status_queued">%1$d more calls waiting</string>
 </resources>

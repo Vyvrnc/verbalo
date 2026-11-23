@@ -67,4 +67,7 @@
     <string name="npu_unsupported_long">Tento telefon (%1$s) nemá podporovanou NPU. Rozpoznávání potřebuje Snapdragon 8 Elite (třeba Galaxy S25 nebo Z Fold7); aplikace se otevře, ale přepisovat tu neumí.</string>
     <string name="history_expand">Zobrazit vše</string>
     <string name="history_collapse">Sbalit</string>
+    <string name="start_status_title">Probíhá přepis</string>
+    <string name="start_status_decoding">převádím zvuk</string>
+    <string name="start_status_queued">ve frontě další hovory: %1$d</string>
 </resources>

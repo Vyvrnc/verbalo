@@ -35,7 +35,11 @@ object CallAuto {
     private const val SETTLE_MS = 60_000L
     private const val MAX_ATTEMPTS = 3
 
-    data class Status(val done: Int = 0, val skipped: Int = 0, val failed: Int = 0, val waiting: Int = 0, val last: String? = null)
+    /** [queued]: recordings of chosen contacts still to transcribe in the running pass. */
+    data class Status(
+        val done: Int = 0, val skipped: Int = 0, val failed: Int = 0, val waiting: Int = 0, val last: String? = null,
+        val queued: Int = 0,
+    )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -60,6 +64,9 @@ object CallAuto {
         val contacts = CallSettings.contacts(app)
         val since = CallSettings.since(app)
         var settling = false
+        // First what is to do, so the start screen can show the queue.
+        class Todo(val doc: Doc, val info: CallName.Info, val contact: CallSettings.Contact)
+        val todo = ArrayList<Todo>()
         for (doc in list(app, input)) {
             val known = state.entries[doc.id]
             if (known != null && (known.status != "failed" || known.attempts >= MAX_ATTEMPTS)) continue
@@ -69,12 +76,17 @@ object CallAuto {
             val contact = contacts.firstOrNull { PhoneNumbers.same(it.number, info.number) }
             if (contact == null) { state.mark(doc.id, "skipped", "contact"); continue }
             if (System.currentTimeMillis() - doc.modified < SETTLE_MS) { settling = true; continue }
+            todo.add(Todo(doc, info, contact))
+        }
+        state.save(app)
+        for ((i, t) in todo.withIndex()) {
+            val doc = t.doc
+            _status.value = state.status(app).copy(queued = todo.size - i)
             if (CallSettings.onlyCharging(app) && !charging(app)) break
-            state.save(app)
             when (val result = FileTranscription.transcribeAndWait(app, doc.uri)) {
                 null -> { settling = true; break }   // the user is transcribing something; later
                 is FileTranscription.State.Done -> {
-                    val written = runCatching { write(app, output, doc, info, contact, result) }
+                    val written = runCatching { write(app, output, doc, t.info, t.contact, result) }
                     written.onFailure { AppLog.e(app, TAG, "${doc.name}: zápis přepisu selhal", it) }
                     if (written.isSuccess) {
                         state.mark(doc.id, "done", written.getOrNull())

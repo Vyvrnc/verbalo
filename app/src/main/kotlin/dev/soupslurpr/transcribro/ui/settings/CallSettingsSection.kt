@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import cz.vyvrnc.transcribronpu.calls.CallAuto
@@ -118,7 +119,7 @@ fun CallSettingsSection() {
         Item(
             stringResource(R.string.calls_contacts_title),
             if (contacts.isEmpty()) stringResource(R.string.calls_contacts_description)
-            else contacts.joinToString(", ") { it.name.ifBlank { it.number } },
+            else pluralStringResource(R.plurals.calls_contacts_count, contacts.size, contacts.size),
         ) { dialog = "contacts" }
         Item(
             stringResource(R.string.calls_when_title),
@@ -135,48 +136,28 @@ fun CallSettingsSection() {
     }
 
     when (dialog) {
-        "contacts" -> AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text(stringResource(R.string.calls_contacts_title)) },
-            text = {
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text(stringResource(R.string.calls_contacts_hint))
-                    contacts.forEach { c ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(c.name.ifBlank { c.number })
-                                if (c.name.isNotBlank()) Text(c.number)
-                            }
-                            IconButton(onClick = {
-                                CallSettings.removeContact(context, c.number)
-                                contacts = CallSettings.contacts(context)
-                                changed()
-                            }) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.calls_contact_remove)) }
-                        }
-                    }
+        "contacts" -> ChosenContactsPage(
+            onAdd = {
+                // Many at once needs the contacts permission; without it, the system picker (one by one).
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    dialog = "many"
+                } else {
+                    contactsPermission.launch(Manifest.permission.READ_CONTACTS)
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    // Many at once needs the contacts permission; without it, the system picker (one by one).
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
-                        dialog = "many"
-                    } else {
-                        contactsPermission.launch(Manifest.permission.READ_CONTACTS)
-                    }
-                }) { Text(stringResource(R.string.calls_contact_add)) }
+            onChanged = {
+                contacts = CallSettings.contacts(context)
+                changed()
             },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.settings_close)) } },
+            onBack = { dialog = null },
         )
-        "many" -> ContactsPickDialog(
-            chosen = contacts.map { it.number }.toSet(),
-            onDismiss = { dialog = "contacts" },
-            onAdd = { added ->
-                CallSettings.addContacts(context, added.map { CallSettings.Contact(it.name, it.number) })
+        "many" -> PickContactsPage(
+            onAdded = {
                 contacts = CallSettings.contacts(context)
                 changed(forget = true)
                 dialog = "contacts"
             },
+            onBack = { dialog = "contacts" },
         )
         "single" -> LaunchedEffect(Unit) {
             dialog = "contacts"

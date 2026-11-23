@@ -118,4 +118,10 @@
     <string name="calls_pick_loading">Loading contacts…</string>
     <string name="calls_pick_none">No contact found</string>
     <string name="calls_pick_add">Add (%1$d)</string>
+    <string name="calls_contacts_remove">Remove (%1$d)</string>
+    <string name="calls_pick_ticked">ticked %1$d</string>
+    <plurals name="calls_contacts_count">
+        <item quantity="one">%1$d contact</item>
+        <item quantity="other">%1$d contacts</item>
+    </plurals>
 </resources>
