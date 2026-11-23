@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdarg>
 #include <cstring>
 #include <map>
@@ -46,6 +47,9 @@ namespace {
 // Token ids of the large-v3 vocabulary (openai/whisper-large-v3-turbo generation_config.json).
 constexpr int kEot = 50257, kSot = 50258, kLangFirst = 50259, kLangEnd = 50359;
 constexpr int kTranscribe = 50360, kStartOfPrev = 50362, kNoTimestamps = 50364;
+// <|0.00|> .. <|30.00|> in 20 ms steps follow <|notimestamps|>.
+constexpr int kTimestampBegin = kNoTimestamps + 1;
+constexpr int kMaxInitialTimestamp = 50;   // the first segment starts within 1 s (openai/whisper)
 constexpr size_t kMaxPromptTokens = 64;  // keeps >= 128 cache slots for the transcript
 constexpr int kDecodeLen = 200;          // attention_mask length; cache holds 199
 // generation_config "suppress_tokens" (all < kEot or special); specials are excluded anyway.
@@ -430,6 +434,7 @@ struct RunOut {
     int encode_runs = 0, decode_runs = 0, lang_token = -1, loop_cuts = 0;
     std::vector<int> tokens;
     bool aborted = false;
+    bool truncated = false;   // a window hit the token limit instead of <|endoftext|>
 };
 
 class Whisper {
@@ -449,9 +454,10 @@ public:
     bool shared() const { return rpc_ != nullptr; }
 
     // prev: text tokens fed after <|startofprev|> (vocabulary hint), at most kMaxPromptTokens,
-    // the most recent kept.
+    // the most recent kept. timestamps: decode with segment timestamp tokens (meaningful for
+    // audio of one window, up to 30 s; they restart at 0 in every window).
     RunOut transcribe(const float * pcm, size_t n, int lang_token, int threads, RunToken & token,
-                      const std::vector<int> & prev = {}) {
+                      const std::vector<int> & prev = {}, bool timestamps = false) {
         RunOut r;
         const auto t_full = Clock::now();
         const size_t chunks = std::max<size_t>(1, (n + kChunkSamples - 1) / kChunkSamples);
@@ -469,7 +475,7 @@ public:
             r.encode_ms += ms_since(t0);
             r.encode_runs++;
 
-            decode_window(r, lang, token, prev);
+            decode_window(r, lang, token, prev, timestamps);
             if (r.lang_token < 0) r.lang_token = lang;
             token.progress = (int) ((c + 1) * 100 / chunks);
         }
@@ -582,26 +588,69 @@ private:
     // Greedy decoding has no temperature fallback, so a hallucination loop would run to the
     // 196-token limit. When the window ends in the same k-gram repeated (k 1..32: 8x for
     // k = 1, 4x for k = 2..3, 3x for longer), keep one copy and stop the window.
-    static bool cut_loop(std::vector<int> & window, std::vector<int> & all) {
-        const size_t n = window.size();
+    // Number of trailing elements to drop so that one copy of a loop stays; 0 when no loop.
+    static size_t loop_tail(const std::vector<int> & seq) {
+        const size_t n = seq.size();
         for (size_t k = 1; k <= 32; ++k) {
             const size_t reps = k == 1 ? 8 : k <= 3 ? 4 : 3;
             if (n < k * reps) break;
             bool same = true;
-            for (size_t i = 0; i < k * (reps - 1) && same; ++i) same = window[n - 1 - i] == window[n - 1 - i - k];
-            if (!same) continue;
-            const size_t drop = k * (reps - 1);
-            window.resize(n - drop);
+            for (size_t i = 0; i < k * (reps - 1) && same; ++i) same = seq[n - 1 - i] == seq[n - 1 - i - k];
+            if (same) return k * (reps - 1);
+        }
+        return 0;
+    }
+
+    // With timestamps the loop is looked for in the text tokens only (a repeated phrase gets a
+    // new timestamp every time); window_text holds them, window_at their index in window.
+    static bool cut_loop(std::vector<int> & window, std::vector<int> & all,
+                         std::vector<int> & window_text, std::vector<size_t> & window_at, bool timestamps) {
+        if (!timestamps) {
+            const size_t drop = loop_tail(window);
+            if (drop == 0) return false;
+            window.resize(window.size() - drop);
             all.resize(all.size() - drop);
             return true;
         }
-        return false;
+        const size_t drop = loop_tail(window_text);
+        if (drop == 0) return false;
+        const size_t keep_text = window_text.size() - drop;
+        const size_t keep = keep_text == 0 ? 0 : window_at[keep_text - 1] + 1;
+        all.resize(all.size() - (window.size() - keep));
+        window.resize(keep);
+        window_text.resize(keep_text);
+        window_at.resize(keep_text);
+        return true;
+    }
+
+    // openai/whisper ApplyTimestampRules for greedy decoding: timestamps come in pairs and never
+    // go back, the first token is a timestamp within kMaxInitialTimestamp, and a timestamp is
+    // forced when all timestamps together are likelier than the best text token (in decode_window).
+    void apply_timestamp_rules(std::vector<uint8_t> & ban, const std::vector<int> & window) const {
+        const int n_vocab = (int) n_vocab_;
+        if (window.empty()) {
+            for (int t = 0; t < kTimestampBegin; ++t) ban[t] = 1;
+            for (int t = kTimestampBegin + kMaxInitialTimestamp + 1; t < n_vocab; ++t) ban[t] = 1;
+            return;
+        }
+        const bool last_ts = window.back() >= kTimestampBegin;
+        const bool penult_ts = window.size() < 2 || window[window.size() - 2] >= kTimestampBegin;
+        if (last_ts) {
+            if (penult_ts) for (int t = kTimestampBegin; t < n_vocab; ++t) ban[t] = 1;   // text next
+            else for (int t = 0; t < kEot; ++t) ban[t] = 1;                               // close the pair
+        }
+        int last_time = -1;
+        for (int t : window) if (t >= kTimestampBegin) last_time = std::max(last_time, t);
+        if (last_time >= 0) {
+            const int lowest = (last_ts && !penult_ts) ? last_time : last_time + 1;
+            for (int t = kTimestampBegin; t < std::min(lowest, n_vocab); ++t) ban[t] = 1;
+        }
     }
 
     // Greedy decode of one window: prompt [<|startofprev|> prev...] <|sot|> <|lang|>
     // <|transcribe|> <|notimestamps|>, language picked from the logits after <|sot|> when
     // not given (lang < 0).
-    void decode_window(RunOut & r, int & lang, RunToken & token, const std::vector<int> & prev) {
+    void decode_window(RunOut & r, int & lang, RunToken & token, const std::vector<int> & prev, bool timestamps) {
         for (auto & p : self_) {
             memset(p.a->data, 0, p.a->bytes);
             bind(dec_, p.in, p.a);
@@ -615,11 +664,16 @@ private:
             const size_t take = std::min(prev.size(), kMaxPromptTokens);
             prompt.insert(prompt.end(), prev.end() - (std::ptrdiff_t) take, prev.end());
         }
-        prompt.insert(prompt.end(), {kSot, lang, kTranscribe, kNoTimestamps});
+        prompt.insert(prompt.end(), {kSot, lang, kTranscribe});
+        if (!timestamps) prompt.push_back(kNoTimestamps);
         const int prompt_len = (int) prompt.size();
         std::vector<int> seq = {prompt[0]};
         bool first_generated = true;
         std::vector<int> window;   // tokens generated in this window
+        std::vector<int> window_text;
+        std::vector<size_t> window_at;
+        std::vector<uint8_t> ban;
+        std::vector<float> v;
 
         for (int n = 0; n < kDecodeLen - 1; ++n) {
             if (token.abort.load()) { r.aborted = true; return; }
@@ -652,7 +706,7 @@ private:
                     }
                     lang = next;
                 }
-            } else {
+            } else if (!timestamps) {
                 next = -1;
                 float best = -1e30f;
                 for (size_t t = 0; t < n_vocab_; ++t) {
@@ -662,16 +716,40 @@ private:
                     if (v > best) { best = v; next = (int) t; }
                 }
                 first_generated = false;
+            } else {
+                ban = suppressed_;
+                for (size_t t = kTimestampBegin; t < n_vocab_; ++t) ban[t] = 0;
+                if (window.size() == 1) ban[220] = 1;   // no blank first word (suppress_blank)
+                apply_timestamp_rules(ban, window);
+                v.resize(n_vocab_);
+                float best_text = -1e30f, best_ts = -1e30f;
+                int text_tok = -1, ts_tok = -1;
+                for (size_t t = 0; t < n_vocab_; ++t) {
+                    if (ban[t]) continue;
+                    v[t] = get_float(*logits_, lg, t);
+                    if ((int) t < kTimestampBegin) { if (v[t] > best_text) { best_text = v[t]; text_tok = (int) t; } }
+                    else if (v[t] > best_ts) { best_ts = v[t]; ts_tok = (int) t; }
+                }
+                // All allowed timestamps together (log-sum-exp) against the best text token.
+                bool take_ts = ts_tok >= 0 && text_tok < 0;
+                if (ts_tok >= 0 && text_tok >= 0) {
+                    double sum = 0;
+                    for (size_t t = kTimestampBegin; t < n_vocab_; ++t) if (!ban[t]) sum += std::exp((double) v[t] - best_ts);
+                    take_ts = best_ts + std::log(sum) > best_text;
+                }
+                next = take_ts ? ts_tok : text_tok;
             }
             r.sample_ms += ms_since(t0);
             if (n + 1 >= prompt_len) {
                 if (next == kEot || next < 0) return;
                 r.tokens.push_back(next);
                 window.push_back(next);
-                if (cut_loop(window, r.tokens)) { r.loop_cuts++; return; }
+                if (next < kTimestampBegin) { window_text.push_back(next); window_at.push_back(window.size() - 1); }
+                if (cut_loop(window, r.tokens, window_text, window_at, timestamps)) { r.loop_cuts++; return; }
             }
             seq.push_back(next);
         }
+        r.truncated = true;
     }
 };
 
@@ -751,9 +829,10 @@ NPU_FN(jlong, open)(JNIEnv * env, jclass, jstring libDir, jstring encoderPath, j
 #endif
 }
 
-// Returns [lang_token, loop_cuts, text tokens...]; langToken -1 detects the language.
+// Returns [lang_token, loop_cuts, truncated, tokens...]; langToken -1 detects the language.
+// With timestamps the tokens include timestamp tokens (kTimestampBegin + time / 20 ms).
 NPU_FN(jintArray, transcribe)(JNIEnv * env, jclass, jlong handle, jfloatArray pcm, jint langToken, jint threads,
-                              jintArray prompt) {
+                              jintArray prompt, jboolean timestamps) {
 #ifndef WB_HAVE_QNN
     throw_java(env, "Aplikace byla sestavena bez hlaviček QNN");
     return nullptr;
@@ -773,11 +852,13 @@ NPU_FN(jintArray, transcribe)(JNIEnv * env, jclass, jlong handle, jfloatArray pc
     try {
         std::lock_guard<std::mutex> lock(e->mutex);
         RunToken token;
-        const RunOut r = e->w->transcribe(samples.data(), samples.size(), langToken, threads, token, prev);
+        const RunOut r = e->w->transcribe(samples.data(), samples.size(), langToken, threads, token, prev,
+                                          timestamps == JNI_TRUE);
         std::vector<jint> out;
-        out.reserve(r.tokens.size() + 2);
+        out.reserve(r.tokens.size() + 3);
         out.push_back(r.lang_token);
         out.push_back(r.loop_cuts);
+        out.push_back(r.truncated ? 1 : 0);
         for (int t : r.tokens) out.push_back(t);
         jintArray arr = env->NewIntArray((jsize) out.size());
         if (arr) env->SetIntArrayRegion(arr, 0, (jsize) out.size(), out.data());

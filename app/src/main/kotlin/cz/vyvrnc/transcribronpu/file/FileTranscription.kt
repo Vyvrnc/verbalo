@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import cz.vyvrnc.transcribronpu.history.AppLog
 import dev.soupslurpr.transcribro.R
 import cz.vyvrnc.transcribronpu.history.DictationHistory
+import cz.vyvrnc.transcribronpu.npu.NpuEngine
 import cz.vyvrnc.transcribronpu.npu.NpuModel
 import cz.vyvrnc.transcribronpu.npu.NpuSettings
 import cz.vyvrnc.transcribronpu.npu.SilenceSplitter
@@ -38,6 +39,8 @@ object FileTranscription {
     private const val SILENCE_DBFS = -50.0
     /** Quiet speech is raised towards -3 dBFS peak, at most by this factor (+20 dB). */
     private const val MAX_GAIN = 10f
+    /** Continuations of one block after a cut-short NPU call. */
+    private const val MAX_RESUMES = 4
 
     sealed interface State {
         data object Idle : State
@@ -118,7 +121,7 @@ object FileTranscription {
                 AppLog.i(app, TAG, "$name: stereo, " + (turns?.let { "${it.size} promluv podle kanálů" } ?: "kanály mluvčí nerozliší"))
             }
             val language = NpuSettings.resolveLanguage(app, null)
-            val (text, failed) = transcribe(app, id, language, name, seconds, turns, stereo)
+            val (text, failed) = transcribe(app, id, language, name, seconds, turns, stereo, levels)
             if (text.isBlank()) {
                 throw AudioDecoder.Unsupported(app.getString(if (failed > 0) R.string.file_error_npu_failed else R.string.file_error_no_speech))
             }
@@ -153,7 +156,7 @@ object FileTranscription {
      */
     private suspend fun transcribe(
         app: Context, id: String, language: String, name: String, seconds: Double,
-        turns: List<SpeakerTurns.Turn>?, stereo: java.io.File,
+        turns: List<SpeakerTurns.Turn>?, stereo: java.io.File, levels: AudioDecoder.ChannelLevels,
     ): Pair<String, Int> {
         var failed = 0
         val whisper = WhisperRepository(app)
@@ -169,30 +172,123 @@ object FileTranscription {
                     publish(at, out.toString())
                 }
             } else RandomAccessFile(stereo, "r").use { st ->
-                // Each turn from its speaker's own channel: no crosstalk, and Whisper is surer of a
-                // clean channel than of the mix. The mono file stays for playback in the history.
-                val channelTotal = (st.length() / 4).toInt()
-                // "[mm:ss] Me: …" / "[mm:ss] Other side: …", one paragraph per turn.
-                var lastSpeaker: SpeakerTurns.Speaker? = null
-                for (turn in turns) {
-                    val channel = if (turn.speaker == SpeakerTurns.Speaker.ME) 0 else 1
-                    val from = (turn.startSec * AudioDecoder.RATE).toInt().coerceIn(0, total)
-                    val to = (turn.endSec * AudioDecoder.RATE).toInt().coerceIn(from, minOf(total, channelTotal))
-                    val head = if (turn.speaker == lastSpeaker) "" else
-                        (if (out.isEmpty()) "" else "\n\n") + "[${clock(from)}] ${app.getString(turn.speaker.labelRes)}: "
-                    val said = StringBuilder()
-                    failed += transcribeRange(app, whisper, { s, n -> readChannel(st, channel, s, n) }, from, to, language, name) { at, part ->
-                        join(said, part)
-                        publish(at, if (said.isEmpty()) out.toString() else "$out$head$said")
-                    }
-                    // A turn with nothing recognised (noise, a cough) leaves no empty label behind.
-                    if (said.isEmpty()) continue
-                    if (head.isEmpty()) join(out, said.toString()) else out.append(head).append(said)
-                    lastSpeaker = turn.speaker
+                failed += transcribeChannels(app, whisper, st, levels, turns, total, language, name) { at, preview ->
+                    out.setLength(0)
+                    out.append(preview)
+                    publish(at, preview)
                 }
             }
         }
         return out.toString().trim() to failed
+    }
+
+    /** Text of one segment placed on the recording's time line. */
+    private class Said(val speaker: SpeakerTurns.Speaker, val at: Int, val text: String)
+
+    /**
+     * Stereo call: each speaker's speech from their own channel (no crosstalk, and Whisper is
+     * surer of a clean channel than of the mix), packed into blocks of up to 26 s, one NPU call
+     * per block with segment timestamps. The segments go back on the recording's time line and
+     * both channels are merged by time into "[m:ss] Me: …" / "[m:ss] Other side: …" paragraphs.
+     * [onPreview] gets the progress (sample of [total]) and the text so far. Returns failed blocks.
+     */
+    private suspend fun transcribeChannels(
+        app: Context, whisper: WhisperRepository, st: RandomAccessFile, levels: AudioDecoder.ChannelLevels,
+        turns: List<SpeakerTurns.Turn>, total: Int, language: String, name: String,
+        onPreview: (Int, String) -> Unit,
+    ): Int {
+        val channelTotal = minOf(total, (st.length() / 4).toInt())
+        val step = AudioDecoder.ChannelLevels.STEP_S
+        val blocks = SpeakerTurns.Speaker.entries.flatMap { speaker ->
+            val own = if (speaker == SpeakerTurns.Speaker.ME) levels.left else levels.right
+            val spans = ChannelBlocks.speech(turns, speaker, own, step, SpeakerTurns.SILENCE_DB, channelTotal)
+            ChannelBlocks.pack(spans, speaker, own, step)
+        }.sortedBy { it.recStart }
+        val speech = blocks.sumOf { it.length.toLong() }.coerceAtLeast(1)
+        AppLog.i(app, TAG, "%s: %d bloků, %.1f s řeči z %.1f s".format(
+            name, blocks.size, speech / AudioDecoder.RATE.toDouble(), channelTotal / AudioDecoder.RATE.toDouble()))
+
+        val said = ArrayList<Said>()
+        val previous = HashMap<SpeakerTurns.Speaker, IntArray>()
+        var done = 0L
+        var failed = 0
+        var calls = 0
+        for (block in blocks) {
+            kotlin.coroutines.coroutineContext.ensureActive()
+            val channel = if (block.speaker == SpeakerTurns.Speaker.ME) 0 else 1
+            val audio = ShortArray(block.length)
+            for (piece in block.pieces) {
+                readChannel(st, channel, piece.recStart, piece.length).copyInto(audio, piece.blockOffset)
+            }
+            if (loudestDbfs(audio) > SILENCE_DBFS) {
+                val loud = amplified(audio)
+                val texts = ArrayList<String>()
+                // A block cut short (token limit, a hallucination loop) goes on from the end of its
+                // last closed segment, a few times at most.
+                var offset = 0
+                var resumes = 0
+                while (offset < loud.size) {
+                    calls++
+                    val at = block.toRecording(offset)
+                    val timed = transcribeTimed(app, whisper, loud.copyOfRange(offset, loud.size), language, previous[block.speaker], name, at)
+                    if (timed == null) {
+                        failed++
+                        said.add(Said(block.speaker, at, app.getString(R.string.file_window_failed, clock(at))))
+                        break
+                    }
+                    val closed = timed.closedUntilSec
+                    val next = if (closed == null) -1 else offset + (closed * AudioDecoder.RATE).toInt()
+                    val resume = timed.cut && closed != null && resumes < MAX_RESUMES &&
+                        next - offset >= AudioDecoder.RATE && loud.size - next >= AudioDecoder.RATE
+                    for (seg in timed.segments) {
+                        if (resume && seg.endSec > closed!!) continue
+                        said.add(Said(block.speaker, block.toRecording(offset + (seg.startSec * AudioDecoder.RATE).toInt()), seg.text))
+                        texts.add(seg.text)
+                    }
+                    if (!resume) break
+                    offset = next
+                    resumes++
+                }
+                if (texts.isNotEmpty()) previous[block.speaker] = whisper.encode(" " + texts.joinToString(" "))
+            }
+            done += block.length
+            onPreview((done * total / speech).toInt(), merge(app, said))
+        }
+        AppLog.i(app, TAG, "%s: %d volání NPU na %d bloků".format(name, calls, blocks.size))
+        return failed
+    }
+
+    /** Two attempts; null when both fail. Cancellation is never swallowed. */
+    private suspend fun transcribeTimed(
+        app: Context, whisper: WhisperRepository, pcm: ShortArray, language: String, previous: IntArray?,
+        name: String, at: Int,
+    ): NpuEngine.Timed? {
+        repeat(2) { attempt ->
+            try {
+                return whisper.transcribeTimed(pcm, language, previous)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.e(app, TAG, "$name: blok ${clock(at)}, pokus ${attempt + 1} selhal", e)
+            }
+        }
+        return null
+    }
+
+    /** Both channels by time; a new paragraph with time and label whenever the speaker changes. */
+    private fun merge(app: Context, said: List<Said>): String {
+        val out = StringBuilder()
+        var last: SpeakerTurns.Speaker? = null
+        for (s in said.sortedBy { it.at }) {
+            if (s.speaker != last) {
+                if (out.isNotEmpty()) out.append("\n\n")
+                out.append("[").append(clock(s.at)).append("] ").append(app.getString(s.speaker.labelRes)).append(": ").append(s.text)
+                last = s.speaker
+            } else {
+                join(out, s.text)
+            }
+        }
+        return out.toString()
     }
 
     /**

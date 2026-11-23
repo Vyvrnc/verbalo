@@ -21,7 +21,7 @@ object SpeakerTurns {
     /** One channel this much louder than the other decides the step. */
     private const val MARGIN_DB = 6f
     /** Steps where both channels are quieter are silence. */
-    private const val SILENCE_DB = -50f
+    const val SILENCE_DB = -50f
     /** Shorter runs (1.5 s) join the turn before them, so a "jo" in between does not split it. */
     private const val MIN_TURN_STEPS = 3
     /** Fewer voiced steps (10 s) is too little to tell a call from a stereo music file. */

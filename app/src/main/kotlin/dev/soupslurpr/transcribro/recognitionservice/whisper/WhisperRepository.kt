@@ -35,6 +35,23 @@ class WhisperRepository(private val context: Context) {
     }
 
     /**
+     * One window (at most [SilenceSplitter.MAX_SAMPLES]) with segment times, for stitching
+     * longer recordings back together. [previous] is the text before this audio (tokens); its
+     * end is fed to Whisper after the vocabulary as context.
+     */
+    suspend fun transcribeTimed(data: ShortArray, language: String, previous: IntArray?): NpuEngine.Timed {
+        val vocabulary = prompt?.takeLast(VOCABULARY_WITH_CONTEXT) ?: emptyList()
+        val before = previous?.takeLast(CONTEXT_TOKENS) ?: emptyList()
+        val combined = (vocabulary + before).toIntArray().takeIf { it.isNotEmpty() }
+        val timed = NpuEngine.transcribeTimed(context, toFloat(data), language, combined)
+        return timed.copy(segments = timed.segments.map {
+            it.copy(text = SpokenCommands.apply(replacements.apply(it.text), language))
+        }.filter { it.text.isNotBlank() })
+    }
+
+    fun encode(text: String): IntArray = WhisperTokenizer.encode(context, text)
+
+    /**
      * Unfinished text for live display: the same model on the audio recorded so far. Null
      * when the NPU is busy (final transcriptions take priority) or the audio no longer fits
      * one window.
@@ -48,4 +65,13 @@ class WhisperRepository(private val context: Context) {
     fun preload() = NpuEngine.preload(context)
 
     private fun toFloat(data: ShortArray) = FloatArray(data.size) { (data[it] / 32767.0f).coerceIn(-1f..1f) }
+
+    private companion object {
+        /**
+         * The native side keeps the last 64 prompt tokens, and every prompt token is one less for
+         * the transcript (200 in all). Vocabulary and context share a smaller budget.
+         */
+        const val VOCABULARY_WITH_CONTEXT = 32
+        const val CONTEXT_TOKENS = 24
+    }
 }

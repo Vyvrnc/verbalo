@@ -12,6 +12,9 @@ import java.io.ByteArrayOutputStream
 object WhisperTokenizer {
     /** <|xx|> tokens start here, in this order (generation_config.json of large-v3-turbo). */
     const val LANG_FIRST = 50259
+    /** <|0.00|>; each next id is 20 ms later. Not in the text table, so [decode] skips them. */
+    const val TIMESTAMP_BEGIN = 50365
+    const val TIMESTAMP_STEP_S = 0.02
     private val LANGS = ("en,zh,de,es,ru,ko,fr,ja,pt,tr,pl,ca,nl,ar,sv,it,id,hi,fi,vi,he,uk,el,ms,cs,ro,da,hu,ta,no," +
         "th,ur,hr,bg,lt,la,mi,ml,cy,sk,te,fa,lv,bn,sr,az,sl,kn,et,mk,br,eu,is,hy,ne,mn,bs,kk,sq,sw,gl,mr,pa,si,km,sn,yo," +
         "so,af,oc,ka,be,tg,sd,gu,am,yi,lo,uz,fo,ht,ps,tk,nn,mt,sa,lb,my,bo,tl,mg,as,tt,haw,ln,ha,ba,jw,su,yue").split(',')

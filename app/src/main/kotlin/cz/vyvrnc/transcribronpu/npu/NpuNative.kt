@@ -10,10 +10,13 @@ internal object NpuNative {
     @JvmStatic external fun open(libDir: String, encoderPath: String, decoderPath: String): Long
 
     /**
-     * [lang token, loop cuts, text tokens...]; [langToken] -1 detects the language. [prompt]
-     * (may be null) are text tokens fed after <|startofprev|>, at most the last 64 are used.
+     * [lang token, loop cuts, truncated (0/1), tokens...]; [langToken] -1 detects the language.
+     * [prompt] (may be null) are text tokens fed after <|startofprev|>, at most the last 64 are
+     * used. With [timestamps] the tokens include timestamp tokens (see [WhisperTokenizer.TIMESTAMP_BEGIN]).
      */
-    @JvmStatic external fun transcribe(handle: Long, pcm: FloatArray, langToken: Int, threads: Int, prompt: IntArray?): IntArray
+    @JvmStatic external fun transcribe(
+        handle: Long, pcm: FloatArray, langToken: Int, threads: Int, prompt: IntArray?, timestamps: Boolean,
+    ): IntArray
 
     @JvmStatic external fun info(handle: Long): String
 

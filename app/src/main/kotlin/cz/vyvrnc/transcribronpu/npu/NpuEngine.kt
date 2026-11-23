@@ -82,15 +82,72 @@ object NpuEngine {
             }
         }
 
+    /** Text between two timestamps of one window, times in seconds from the window start. */
+    data class Segment(val startSec: Double, val endSec: Double, val text: String)
+
+    /**
+     * [segments] in order. [closedUntilSec] is the end of the last segment closed by its own
+     * timestamp; when [cut] (token limit or a cut loop) the audio after it may be missing.
+     */
+    data class Timed(val segments: List<Segment>, val closedUntilSec: Double?, val cut: Boolean)
+
+    /**
+     * One window (up to ~29.5 s) with segment timestamps, for callers that must put the text
+     * back on a longer time line. Same errors as [transcribe].
+     */
+    suspend fun transcribeTimed(context: Context, pcm: FloatArray, language: String, prompt: IntArray? = null): Timed =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            try {
+                mutex.withLock {
+                    val ids = runIds(app, pcm, language, prompt, timestamps = true)
+                    segments(app, ids.drop(3), pcm.size / 16000.0, cut = ids[1] > 0 || ids[2] != 0)
+                }
+            } catch (e: Exception) {
+                AppLog.e(app, "Whisper", "přepis s časy selhal", e)
+                throw e
+            } finally {
+                scheduleIdleRelease()
+            }
+        }
+
+    /** <t> text <t><t> text <t> ... ; text after the last timestamp ends at [audioSec]. */
+    private fun segments(app: Context, ids: List<Int>, audioSec: Double, cut: Boolean): Timed {
+        fun time(id: Int) = ((id - WhisperTokenizer.TIMESTAMP_BEGIN) * WhisperTokenizer.TIMESTAMP_STEP_S).coerceAtMost(audioSec)
+        val out = ArrayList<Segment>()
+        var start: Double? = null
+        var closed: Double? = null
+        val text = ArrayList<Int>()
+        for (id in ids) {
+            if (id < WhisperTokenizer.TIMESTAMP_BEGIN) { text.add(id); continue }
+            val t = time(id)
+            if (start != null && text.isNotEmpty()) {
+                out.add(Segment(start, t, WhisperTokenizer.decode(app, text).trim()))
+                text.clear()
+                closed = t
+                start = null
+            } else {
+                start = t
+            }
+        }
+        if (text.isNotEmpty()) out.add(Segment(start ?: closed ?: 0.0, audioSec, WhisperTokenizer.decode(app, text).trim()))
+        return Timed(out.filter { it.text.isNotEmpty() }, closed, cut)
+    }
+
     /** Call with [mutex] held. */
-    private fun run(app: Context, pcm: FloatArray, language: String, prompt: IntArray?): String {
+    private fun run(app: Context, pcm: FloatArray, language: String, prompt: IntArray?): String =
+        WhisperTokenizer.decode(app, runIds(app, pcm, language, prompt, timestamps = false).drop(3)).trim()
+
+    /** Call with [mutex] held. [lang, loop cuts, truncated, tokens...] */
+    private fun runIds(app: Context, pcm: FloatArray, language: String, prompt: IntArray?, timestamps: Boolean): IntArray {
         val h = ensureLoaded(app)
         val t0 = System.nanoTime()
-        val ids = NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS, prompt)
-        Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, prompt %d, loop cuts %d)".format(
-            pcm.size / 16000f, ids.size - 2, (System.nanoTime() - t0) / 1_000_000,
-            WhisperTokenizer.langCode(ids[0]), prompt?.size ?: 0, ids[1]))
-        return WhisperTokenizer.decode(app, ids.drop(2)).trim()
+        val ids = NpuNative.transcribe(h, pcm, WhisperTokenizer.langToken(language), MEL_THREADS, prompt, timestamps)
+        Log.i(TAG, "%.1f s audio -> %d tokens in %d ms (lang %s, prompt %d, loop cuts %d%s%s)".format(
+            pcm.size / 16000f, ids.size - 3, (System.nanoTime() - t0) / 1_000_000,
+            WhisperTokenizer.langCode(ids[0]), prompt?.size ?: 0, ids[1],
+            if (timestamps) ", timestamps" else "", if (ids[2] != 0) ", token limit" else ""))
+        return ids
     }
 
     /** Call with [mutex] held. */
