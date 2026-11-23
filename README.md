@@ -21,6 +21,10 @@ and has since become its own app: a new engine, new features and a new look.
 - **Calls split by speaker**: a stereo call recording (your microphone left, the other side
   right) comes out as a dialogue, `[03:12] Me: …` / `[03:20] Other side: …`, each turn transcribed
   from its own channel.
+- **Automatic call transcription**: new recordings from a call recorder (ShizuCallRecorder
+  by default, or a custom file-name pattern) are transcribed for the contacts you choose, at once
+  or only while charging, and written as Markdown with the caller, direction and time to a folder
+  you pick (sync it with Google Drive, Syncthing or anything else). Audio stays on the phone.
 - **Optional cleanup** with Gemma 4 E2B, also on the phone: fixes misheard words, punctuation and
   self-corrections, and shapes the text for the app it goes into (a list, an e-mail, a chat
   message). Per-app rules and an editable prompt.
