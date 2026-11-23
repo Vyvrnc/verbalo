@@ -25,6 +25,9 @@ and has since become its own app: a new engine, new features and a new look.
   by default, or a custom file-name pattern) are transcribed for the contacts you choose, at once
   or only while charging, and written as Markdown with the caller, direction and time to a folder
   you pick (sync it with Google Drive, Syncthing or anything else). Audio stays on the phone.
+- **Voice recorder folder**: every new recording in the folder your voice recorder saves to is
+  transcribed to a Markdown file in the output folder, with the title and time taken from the file
+  name. Off until you turn it on; older recordings only when you ask.
 - **Optional cleanup** with Gemma 4 E2B, also on the phone: fixes misheard words, punctuation and
   self-corrections, and shapes the text for the app it goes into (a list, an e-mail, a chat
   message). Per-app rules and an editable prompt.
