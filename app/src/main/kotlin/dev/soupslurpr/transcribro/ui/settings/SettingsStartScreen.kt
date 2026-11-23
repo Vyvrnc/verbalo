@@ -82,6 +82,12 @@ fun SettingsStartScreen(
             CleanupSettings()
         }
         item {
+            SettingsCategory(stringResource(R.string.settings_section_calls))
+        }
+        item {
+            CallSettingsSection()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )

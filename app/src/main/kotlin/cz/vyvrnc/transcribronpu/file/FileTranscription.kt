@@ -59,13 +59,27 @@ object FileTranscription {
     /** Until the job has really ended: a cancelled one may still sit in a native NPU call. */
     val busy: Boolean get() = job?.isCompleted == false
 
-    fun start(context: Context, uri: Uri) {
-        if (busy) return
+    /** The started job, or null when another transcription is still running. */
+    @Synchronized
+    fun start(context: Context, uri: Uri): Job? {
+        if (busy) return null
         val app = context.applicationContext
         val name = displayName(app, uri)
         _state.value = State.Decoding(name, 0f)
-        job = scope.launch { run(app, uri, name) }
+        val started = scope.launch { run(app, uri, name) }
+        job = started
         FileTranscriptionService.start(app)
+        return started
+    }
+
+    /**
+     * For automatic transcription: runs [uri] like [start] and waits for the end. Null when
+     * another transcription is running (the caller tries again later) or this one was cancelled.
+     */
+    suspend fun transcribeAndWait(context: Context, uri: Uri): State? {
+        val started = start(context, uri) ?: return null
+        started.join()
+        return _state.value.takeIf { it is State.Done || it is State.Failed }
     }
 
     fun cancel() {
@@ -241,7 +255,7 @@ object FileTranscription {
                     val resume = timed.cut && closed != null && resumes < MAX_RESUMES &&
                         next - offset >= AudioDecoder.RATE && loud.size - next >= AudioDecoder.RATE
                     for (seg in timed.segments) {
-                        if (resume && seg.endSec > closed!!) continue
+                        if (resume && seg.endSec > closed) continue
                         said.add(Said(block.speaker, block.toRecording(offset + (seg.startSec * AudioDecoder.RATE).toInt()), seg.text))
                         texts.add(seg.text)
                     }

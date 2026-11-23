@@ -115,11 +115,15 @@ class FloatingDictationService : Service() {
     /** The app's settings (keyboard switches), kept current so a tap never waits for the disk. */
     @Volatile private var settings: Preferences? = null
 
+    private val callObserver by lazy { cz.vyvrnc.transcribronpu.calls.CallTriggers.MediaObserver(applicationContext) }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WindowManager::class.java)
+        // The process runs anyway while the button is on: a new call recording is picked up at once.
+        callObserver.register()
         scope.launch {
             // A read error leaves the defaults; it must not take the floating button down.
             try {
@@ -154,6 +158,7 @@ class FloatingDictationService : Service() {
 
     override fun onDestroy() {
         _running.value = false
+        callObserver.unregister()
         scope.cancel()
         recognizer?.cancel()
         recognizer?.destroy()

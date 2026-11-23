@@ -61,8 +61,8 @@ android {
         // The NPU path (QNN HTP v79) exists only on SM8750-class phones running Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.0.1"
+        versionCode = 15
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -177,6 +177,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // Gemma text cleanup (Apache 2.0). Its classes carry Kotlin 2.4 metadata, hence Kotlin 2.3.
