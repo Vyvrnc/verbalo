@@ -114,7 +114,6 @@ fun StartScreen() {
         }
 
         item { FloatingCard(floating, Modifier.enterOnce(2)) }
-        item { TranscriptionStatus(Modifier.enterOnce(2)) }
         if (floating.running && !floating.insertion) {
             item {
                 ActionRow(
@@ -137,6 +136,7 @@ fun StartScreen() {
                 modifier = Modifier.enterOnce(5),
             )
         }
+        item { TranscriptionStatus(Modifier.enterOnce(5)) }
 
         item { SectionLabel(stringResource(R.string.start_section_keyboard), Modifier.enterOnce(6)) }
         if (!microphone.status.isGranted) {
@@ -166,8 +166,8 @@ fun StartScreen() {
 }
 
 /**
- * A file or call recording being transcribed right now (and how many calls wait), under the
- * floating button; a tap opens the transcription screen, like the notification. Nothing when idle.
+ * A file or call recording being transcribed right now (and how many calls wait), under
+ * "Transcribe a recording"; a tap opens the transcription screen, like the notification. Nothing when idle.
  */
 @Composable
 private fun TranscriptionStatus(modifier: Modifier) {
