@@ -56,28 +56,43 @@ object CallAuto {
         context.getSystemService(BatteryManager::class.java)?.isCharging == true
 
     private suspend fun pass(app: Context) = mutex.withLock {
-        if (!CallSettings.enabled(app)) return@withLock
-        val input = CallSettings.input(app) ?: return@withLock
-        val output = CallSettings.output(app) ?: return@withLock
         val state = State.load(app)
-        val pattern = CallSettings.pattern(app)
-        val contacts = CallSettings.contacts(app)
-        val since = CallSettings.since(app)
         var settling = false
         // First what is to do, so the start screen can show the queue.
-        class Todo(val doc: Doc, val info: CallName.Info, val contact: CallSettings.Contact)
         val todo = ArrayList<Todo>()
-        for (doc in list(app, input)) {
+        fun eligible(doc: Doc, since: Long): Boolean {
             val known = state.entries[doc.id]
-            if (known != null && (known.status != "failed" || known.attempts >= MAX_ATTEMPTS)) continue
-            if (doc.modified < since) continue
-            val info = CallName.parse(doc.name, pattern)
-            if (info == null) { state.mark(doc.id, "skipped", "name"); continue }
-            val contact = contacts.firstOrNull { PhoneNumbers.same(it.number, info.number) }
-            if (contact == null) { state.mark(doc.id, "skipped", "contact"); continue }
-            if (System.currentTimeMillis() - doc.modified < SETTLE_MS) { settling = true; continue }
-            todo.add(Todo(doc, info, contact))
+            if (known != null && (known.status != "failed" || known.attempts >= MAX_ATTEMPTS)) return false
+            return doc.modified >= since
         }
+        val callsIn = CallSettings.input(app)
+        val callsOut = CallSettings.output(app)
+        if (CallSettings.enabled(app) && callsIn != null && callsOut != null) {
+            val pattern = CallSettings.pattern(app)
+            val contacts = CallSettings.contacts(app)
+            val since = CallSettings.since(app)
+            for (doc in list(app, callsIn)) {
+                if (!eligible(doc, since)) continue
+                val info = CallName.parse(doc.name, pattern)
+                if (info == null) { state.mark(doc.id, "skipped", "name"); continue }
+                val contact = contacts.firstOrNull { PhoneNumbers.same(it.number, info.number) }
+                if (contact == null) { state.mark(doc.id, "skipped", "contact"); continue }
+                if (System.currentTimeMillis() - doc.modified < SETTLE_MS) { settling = true; continue }
+                todo.add(Todo(doc, callsOut, info to contact))
+            }
+        }
+        val recIn = RecorderSettings.input(app)
+        val recOut = RecorderSettings.output(app)
+        if (RecorderSettings.enabled(app) && recIn != null && recOut != null) {
+            val since = RecorderSettings.since(app)
+            for (doc in list(app, recIn)) {
+                if (!eligible(doc, since)) continue
+                if (!doc.audio) { state.mark(doc.id, "skipped", "not audio"); continue }
+                if (System.currentTimeMillis() - doc.modified < SETTLE_MS) { settling = true; continue }
+                todo.add(Todo(doc, recOut, null))
+            }
+        }
+        todo.sortBy { it.doc.modified }
         state.save(app)
         for ((i, t) in todo.withIndex()) {
             val doc = t.doc
@@ -86,7 +101,7 @@ object CallAuto {
             when (val result = FileTranscription.transcribeAndWait(app, doc.uri)) {
                 null -> { settling = true; break }   // the user is transcribing something; later
                 is FileTranscription.State.Done -> {
-                    val written = runCatching { write(app, output, doc, t.info, t.contact, result) }
+                    val written = runCatching { write(app, t, result) }
                     written.onFailure { AppLog.e(app, TAG, "${doc.name}: zápis přepisu selhal", it) }
                     if (written.isSuccess) {
                         state.mark(doc.id, "done", written.getOrNull())
@@ -130,7 +145,10 @@ object CallAuto {
         }
     }
 
-    private class Doc(val id: String, val uri: Uri, val name: String, val modified: Long)
+    private class Doc(val id: String, val uri: Uri, val name: String, val modified: Long, val audio: Boolean)
+
+    /** A recording to transcribe; [call] is null for a voice-recorder file. */
+    private class Todo(val doc: Doc, val output: Uri, val call: Pair<CallName.Info, CallSettings.Contact>?)
 
     private fun list(app: Context, tree: Uri): List<Doc> {
         val parent = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
@@ -147,7 +165,8 @@ object CallAuto {
                 val mime = c.getString(3) ?: ""
                 if (mime == DocumentsContract.Document.MIME_TYPE_DIR) continue
                 val id = c.getString(0)
-                out.add(Doc(id, DocumentsContract.buildDocumentUriUsingTree(tree, id), c.getString(1) ?: id, c.getLong(2)))
+                out.add(Doc(id, DocumentsContract.buildDocumentUriUsingTree(tree, id), c.getString(1) ?: id, c.getLong(2),
+                    mime.startsWith("audio/") || mime.startsWith("video/") || mime == "application/ogg"))
             }
         }
         return out.sortedBy { it.modified }
@@ -155,29 +174,54 @@ object CallAuto {
 
     private val FILE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm")
 
-    /** Markdown with frontmatter; written under a temporary name and renamed when complete. */
-    private fun write(
-        app: Context, tree: Uri, doc: Doc, info: CallName.Info, contact: CallSettings.Contact,
-        done: FileTranscription.State.Done,
-    ): String {
-        val started = info.started ?: OffsetDateTime.ofInstant(Instant.ofEpochMilli(doc.modified), ZoneId.systemDefault())
-        val who = contact.name.ifBlank { contact.number }.replace(Regex("""[\\/:*?"<>|]"""), "").trim()
-        val name = "${started.format(FILE_TIME)}_${info.direction?.code ?: "call"}_$who.md"
-        val text = buildString {
-            append("---\n")
-            append("source: verbalo\n")
-            append("kind: call\n")
-            info.direction?.let { append("direction: ${it.code}\n") }
-            append("number: \"${PhoneNumbers.normalize(info.number)}\"\n")
-            append("contact: \"${contact.name.replace("\"", "'")}\"\n")
-            append("started: ${started.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)}\n")
-            append("duration_s: ${done.audioSec.toInt()}\n")
-            append("recording: \"${doc.name.replace("\"", "'")}\"\n")
-            append("failed_windows: ${done.failedWindows}\n")
-            append("---\n\n")
-            append(done.text.trim())
-            append("\n")
+    /** "Hlas 260721_130310" (Samsung Voice Recorder): the title before the time, and the time. */
+    private val RECORDER_NAME = Regex("""^(.*?)[ _-]*(\d{6})_(\d{6})$""")
+    private val RECORDER_TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss")
+    private val UNSAFE = Regex("""[\\/:*?"<>|]""")
+
+    private fun quoted(v: String) = "\"" + v.replace("\"", "'") + "\""
+
+    /** Markdown with frontmatter in the output folder; returns the file name. */
+    private fun write(app: Context, t: Todo, done: FileTranscription.State.Done): String {
+        val doc = t.doc
+        val zone = ZoneId.systemDefault()
+        val head = StringBuilder("---\nsource: verbalo\n")
+        val name: String
+        if (t.call != null) {
+            val (info, contact) = t.call
+            val started = info.started ?: OffsetDateTime.ofInstant(Instant.ofEpochMilli(doc.modified), zone)
+            val who = contact.name.ifBlank { contact.number }.replace(UNSAFE, "").trim()
+            name = "${started.format(FILE_TIME)}_${info.direction?.code ?: "call"}_$who.md"
+            head.append("kind: call\n")
+            info.direction?.let { head.append("direction: ${it.code}\n") }
+            head.append("number: ${quoted(PhoneNumbers.normalize(info.number))}\n")
+            head.append("contact: ${quoted(contact.name)}\n")
+            if (contact.company.isNotBlank()) head.append("company: ${quoted(contact.company)}\n")
+            head.append("started: ${started.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)}\n")
+        } else {
+            val base = doc.name.substringBeforeLast('.')
+            val m = RECORDER_NAME.find(base)
+            val fromName = m?.let {
+                runCatching { java.time.LocalDateTime.parse(it.groupValues[2] + it.groupValues[3], RECORDER_TIME) }.getOrNull()
+            }
+            // Without a time in the name (renamed recordings): the file is closed when recording ends.
+            val started = fromName?.atZone(zone)?.toOffsetDateTime()
+                ?: OffsetDateTime.ofInstant(Instant.ofEpochMilli(doc.modified - (done.audioSec * 1000).toLong()), zone)
+            val title = (if (fromName != null) m.groupValues[1] else base).trim().ifEmpty { base }
+            name = "${started.format(FILE_TIME)}_${title.replace(UNSAFE, "").trim()}.md"
+            head.append("kind: recording\n")
+            head.append("title: ${quoted(title)}\n")
+            head.append("started: ${started.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)}\n")
         }
+        head.append("duration_s: ${done.audioSec.toInt()}\n")
+        head.append("recording: ${quoted(doc.name)}\n")
+        head.append("failed_windows: ${done.failedWindows}\n")
+        head.append("---\n\n").append(done.text.trim()).append("\n")
+        return save(app, t.output, name, head.toString())
+    }
+
+    /** Written under a temporary name and renamed when complete, where the provider can rename. */
+    private fun save(app: Context, tree: Uri, name: String, text: String): String {
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
         val bytes = text.toByteArray(Charsets.UTF_8)
         fun create(fileName: String) = DocumentsContract.createDocument(app.contentResolver, parent, "application/octet-stream", fileName)

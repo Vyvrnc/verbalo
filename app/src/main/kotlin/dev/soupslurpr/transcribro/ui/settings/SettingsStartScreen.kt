@@ -88,6 +88,12 @@ fun SettingsStartScreen(
             CallSettingsSection()
         }
         item {
+            SettingsCategory(stringResource(R.string.settings_section_recorder))
+        }
+        item {
+            RecorderSettingsSection()
+        }
+        item {
             SettingsCategory(
                 stringResource(R.string.theme)
             )

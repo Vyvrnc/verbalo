@@ -100,7 +100,7 @@
     <string name="calls_contact_add">Přidat kontakt</string>
     <string name="calls_contact_remove">Odebrat</string>
     <string name="calls_contact_failed">Číslo tohoto kontaktu se nepodařilo načíst.</string>
-    <string name="calls_when_title">Kdy přepisovat</string>
+    <string name="calls_when_title">Kdy přepisovat (hovory i diktafon)</string>
     <string name="calls_when_now">Hned po hovoru</string>
     <string name="calls_when_charging">Jen při nabíjení</string>
     <string name="calls_pattern_title">Názvy souborů</string>
@@ -126,4 +126,12 @@
         <item quantity="many">%1$d kontaktu</item>
         <item quantity="other">%1$d kontaktů</item>
     </plurals>
+    <string name="settings_section_recorder">Diktafon</string>
+    <string name="recorder_enabled_title">Automaticky přepisovat nahrávky</string>
+    <string name="recorder_enabled_description">Každá nová nahrávka ve složce se přepíše do souboru Markdown. Zvuk zůstává v telefonu.</string>
+    <string name="recorder_need_folders">Nejdřív vyberte složku s nahrávkami a složku pro přepisy.</string>
+    <string name="recorder_input_title">Složka s nahrávkami</string>
+    <string name="recorder_input_description">Kam ukládá diktafon (Samsung: Recordings/Voice Recorder)</string>
+    <string name="recorder_older_description">Nahrávky pořízené před zapnutím</string>
+    <string name="recorder_older_confirm">Přepíšou se všechny nahrávky ve složce, jedna po druhé. Dlouhé zaberou každá i několik minut.</string>
 </resources>

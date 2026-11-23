@@ -26,7 +26,7 @@ object CallTriggers {
     fun update(context: Context) {
         val app = context.applicationContext
         val wm = WorkManager.getInstance(app)
-        if (!CallSettings.enabled(app)) {
+        if (!CallSettings.enabled(app) && !RecorderSettings.enabled(app)) {
             wm.cancelUniqueWork(WORK)
             return
         }
@@ -63,7 +63,7 @@ object CallTriggers {
         }
 
         override fun onChange(selfChange: Boolean, uri: Uri?) {
-            if (!CallSettings.enabled(context)) return
+            if (!CallSettings.enabled(context) && !RecorderSettings.enabled(context)) return
             handler.removeCallbacks(pass)
             handler.postDelayed(pass, 5_000)
         }

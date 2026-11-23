@@ -100,7 +100,7 @@
     <string name="calls_contact_add">Add contact</string>
     <string name="calls_contact_remove">Remove</string>
     <string name="calls_contact_failed">The number of this contact could not be read.</string>
-    <string name="calls_when_title">When to transcribe</string>
+    <string name="calls_when_title">When to transcribe (calls and recorder)</string>
     <string name="calls_when_now">At once, after the call</string>
     <string name="calls_when_charging">Only while charging</string>
     <string name="calls_pattern_title">File names</string>
@@ -124,4 +124,12 @@
         <item quantity="one">%1$d contact</item>
         <item quantity="other">%1$d contacts</item>
     </plurals>
+    <string name="settings_section_recorder">Voice recorder</string>
+    <string name="recorder_enabled_title">Transcribe recordings automatically</string>
+    <string name="recorder_enabled_description">Every new recording in the folder is transcribed to a Markdown file. The audio stays on the phone.</string>
+    <string name="recorder_need_folders">Choose the recordings folder and the output folder first.</string>
+    <string name="recorder_input_title">Recordings folder</string>
+    <string name="recorder_input_description">Where the voice recorder saves (Samsung: Recordings/Voice Recorder)</string>
+    <string name="recorder_older_description">Recordings made before the switch was turned on</string>
+    <string name="recorder_older_confirm">All recordings in the folder will be transcribed, one after another. Long ones take minutes each.</string>
 </resources>

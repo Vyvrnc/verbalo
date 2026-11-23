@@ -71,10 +71,10 @@ fun CallSettingsSection() {
     }
 
     val pickInput = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) { keep(context, uri); CallSettings.setInput(context, uri); input = uri; changed(forget = true) }
+        if (uri != null) { keepTree(context, uri); CallSettings.setInput(context, uri); input = uri; changed(forget = true) }
     }
     val pickOutput = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) { keep(context, uri); CallSettings.setOutput(context, uri); output = uri; changed() }
+        if (uri != null) { keepTree(context, uri); CallSettings.setOutput(context, uri); output = uri; changed() }
     }
     val contactsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         dialog = if (granted) "many" else "single"
@@ -108,28 +108,28 @@ fun CallSettingsSection() {
                 changed()
             },
         )
-        Item(
+        AutoItem(
             stringResource(R.string.calls_input_title),
             input?.let { folderName(it) } ?: stringResource(R.string.calls_input_description),
         ) { pickInput.launch(null) }
-        Item(
+        AutoItem(
             stringResource(R.string.calls_output_title),
             output?.let { folderName(it) } ?: stringResource(R.string.calls_output_description),
         ) { pickOutput.launch(null) }
-        Item(
+        AutoItem(
             stringResource(R.string.calls_contacts_title),
             if (contacts.isEmpty()) stringResource(R.string.calls_contacts_description)
             else pluralStringResource(R.plurals.calls_contacts_count, contacts.size, contacts.size),
         ) { dialog = "contacts" }
-        Item(
+        AutoItem(
             stringResource(R.string.calls_when_title),
             stringResource(if (onlyCharging) R.string.calls_when_charging else R.string.calls_when_now),
         ) { dialog = "when" }
-        Item(
+        AutoItem(
             stringResource(R.string.calls_pattern_title),
             if (pattern == null) stringResource(R.string.calls_pattern_scr) else stringResource(R.string.calls_pattern_custom),
         ) { dialog = "pattern" }
-        Item(
+        AutoItem(
             stringResource(R.string.calls_older_title),
             stringResource(R.string.calls_older_description),
         ) { dialog = "older" }
@@ -245,12 +245,12 @@ fun CallSettingsSection() {
 }
 
 @Composable
-private fun Item(name: String, description: String, onClick: () -> Unit) {
+internal fun AutoItem(name: String, description: String, onClick: () -> Unit) {
     SettingsIconItem(name = name, description = description, icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight, onClick = onClick)
 }
 
 /** Read access that survives a restart, and write access for the output folder. */
-private fun keep(context: Context, uri: Uri) {
+internal fun keepTree(context: Context, uri: Uri) {
     runCatching {
         context.contentResolver.takePersistableUriPermission(
             uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
@@ -259,7 +259,7 @@ private fun keep(context: Context, uri: Uri) {
 }
 
 /** "primary:Recordings/CallRecorder" -> "Recordings/CallRecorder". */
-private fun folderName(uri: Uri): String =
+internal fun folderName(uri: Uri): String =
     runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfter(':').ifEmpty { "/" } }.getOrDefault(uri.toString())
 
 /** The picked phone row (a one-time grant from the contact picker, no contacts permission). */
