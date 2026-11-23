@@ -112,4 +112,10 @@
     <string name="calls_older_description">Recordings made before the switch was turned on, for the chosen contacts</string>
     <string name="calls_older_confirm">All recordings of the chosen contacts in the folder will be transcribed, one after another. This can take a while.</string>
     <string name="calls_older_go">Transcribe</string>
+    <string name="calls_pick_title">Choose contacts</string>
+    <string name="calls_pick_search">Search by name, company or number</string>
+    <string name="calls_pick_all_shown">Tick all shown (%1$d)</string>
+    <string name="calls_pick_loading">Loading contacts…</string>
+    <string name="calls_pick_none">No contact found</string>
+    <string name="calls_pick_add">Add (%1$d)</string>
 </resources>

@@ -1,6 +1,9 @@
 package dev.soupslurpr.transcribro.ui.settings
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,6 +16,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -68,6 +74,9 @@ fun CallSettingsSection() {
     }
     val pickOutput = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) { keep(context, uri); CallSettings.setOutput(context, uri); output = uri; changed() }
+    }
+    val contactsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        dialog = if (granted) "many" else "single"
     }
     val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uri = result.data?.data
@@ -130,7 +139,7 @@ fun CallSettingsSection() {
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.calls_contacts_title)) },
             text = {
-                Column {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Text(stringResource(R.string.calls_contacts_hint))
                     contacts.forEach { c ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -149,11 +158,30 @@ fun CallSettingsSection() {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    pickContact.launch(Intent(Intent.ACTION_PICK).setType(ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE))
+                    // Many at once needs the contacts permission; without it, the system picker (one by one).
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                        dialog = "many"
+                    } else {
+                        contactsPermission.launch(Manifest.permission.READ_CONTACTS)
+                    }
                 }) { Text(stringResource(R.string.calls_contact_add)) }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.settings_close)) } },
         )
+        "many" -> ContactsPickDialog(
+            chosen = contacts.map { it.number }.toSet(),
+            onDismiss = { dialog = "contacts" },
+            onAdd = { added ->
+                CallSettings.addContacts(context, added.map { CallSettings.Contact(it.name, it.number) })
+                contacts = CallSettings.contacts(context)
+                changed(forget = true)
+                dialog = "contacts"
+            },
+        )
+        "single" -> LaunchedEffect(Unit) {
+            dialog = "contacts"
+            pickContact.launch(Intent(Intent.ACTION_PICK).setType(ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE))
+        }
         "when" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.calls_when_title)) },

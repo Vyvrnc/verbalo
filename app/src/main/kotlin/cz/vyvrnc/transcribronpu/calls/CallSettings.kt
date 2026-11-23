@@ -63,9 +63,12 @@ object CallSettings {
         prefs(context).edit().putString(KEY_CONTACTS, a.toString()).apply()
     }
 
-    fun addContact(context: Context, contact: Contact) {
-        val all = contacts(context)
-        if (all.none { PhoneNumbers.same(it.number, contact.number) }) setContacts(context, all + contact)
+    fun addContact(context: Context, contact: Contact) = addContacts(context, listOf(contact))
+
+    fun addContacts(context: Context, added: List<Contact>) {
+        val all = contacts(context).toMutableList()
+        for (c in added) if (all.none { PhoneNumbers.same(it.number, c.number) }) all.add(c)
+        setContacts(context, all)
     }
 
     fun removeContact(context: Context, number: String) =

@@ -167,16 +167,23 @@ object CallAuto {
             append("\n")
         }
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
-        val temp = DocumentsContract.createDocument(app.contentResolver, parent, "application/octet-stream", "$name.part")
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        fun create(fileName: String) = DocumentsContract.createDocument(app.contentResolver, parent, "application/octet-stream", fileName)
             ?: error("createDocument vrátil null")
+        val temp = create("$name.part")
         try {
-            app.contentResolver.openOutputStream(temp, "wt")!!.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-            val final = DocumentsContract.renameDocument(app.contentResolver, temp, name) ?: temp
-            return DocumentsContract.getDocumentId(final).substringAfterLast('/')
+            app.contentResolver.openOutputStream(temp, "wt")!!.use { it.write(bytes) }
+            if (runCatching { DocumentsContract.renameDocument(app.contentResolver, temp, name) }.getOrNull() != null) return name
         } catch (e: Exception) {
             runCatching { DocumentsContract.deleteDocument(app.contentResolver, temp) }
             throw e
         }
+        // A provider that cannot rename (Google Drive): write under the final name. A sync tool
+        // could see it half written there, but such providers upload a closed file anyway.
+        runCatching { DocumentsContract.deleteDocument(app.contentResolver, temp) }
+        val direct = create(name)
+        app.contentResolver.openOutputStream(direct, "wt")!!.use { it.write(bytes) }
+        return name
     }
 
     /** What was done with each recording, by document id; a small JSON file in the app's files. */

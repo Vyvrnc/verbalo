@@ -112,4 +112,10 @@
     <string name="calls_older_description">Nahrávky vybraných kontaktů pořízené před zapnutím</string>
     <string name="calls_older_confirm">Přepíšou se všechny nahrávky vybraných kontaktů ve složce, jedna po druhé. Může to chvíli trvat.</string>
     <string name="calls_older_go">Přepsat</string>
+    <string name="calls_pick_title">Vybrat kontakty</string>
+    <string name="calls_pick_search">Hledat podle jména, firmy nebo čísla</string>
+    <string name="calls_pick_all_shown">Označit všechny zobrazené (%1$d)</string>
+    <string name="calls_pick_loading">Načítám kontakty…</string>
+    <string name="calls_pick_none">Žádný kontakt nenalezen</string>
+    <string name="calls_pick_add">Přidat (%1$d)</string>
 </resources>
